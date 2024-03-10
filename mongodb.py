@@ -4,6 +4,7 @@ from main import *
 import main
 import tokens
 from datetime import datetime
+from function import *
 
 bot = tokens.bot
 myclient = tokens.myclient
@@ -44,7 +45,7 @@ def update_unknown_datasets(message):
         one_unknown = mycol.find_one()
         msg = one_unknown['message']
         
-        indexs,_ = model_process(model,tokenizer,msg,max_length)
+        indexs,_ = main.model_process(main.model,tokenizer,msg,max_length)
         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
         for i in range(len(indexs)):
             try:

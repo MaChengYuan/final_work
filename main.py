@@ -9,6 +9,7 @@ import tokens
 from NLPmodel import *
 from nltk.tokenize import regexp_tokenize
 from function import *
+from statistics import *
 
 ## ----- import pre-trained model
 
