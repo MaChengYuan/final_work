@@ -1,7 +1,9 @@
 # activate mondodb atlas
 from bson import ObjectId
 from main import *
+import main
 import tokens
+from datetime import datetime
 
 bot = tokens.bot
 myclient = tokens.myclient
@@ -107,7 +109,7 @@ def record_dialogue(record,name):
     mycol = mydb[name]
     #mycol = mydb["customers"]
     now = datetime.now()
-    now_russia = eastern_tz.localize(now)            
+    now_russia = main.eastern_tz.localize(now)            
 
     mydict = { "name": record.name , "id": record.id, "message": record.message, "predicted":record.predicted, "response":record.response ,"time": now_russia }   
     

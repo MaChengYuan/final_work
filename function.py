@@ -6,6 +6,8 @@ import spacy
 import random
 import re
 from torch import nn
+from datetime import datetime
+
 
 
 with open('/Users/mac/Desktop/SCIENTIFIC_RESEARCH/main_QA.json', 'r') as json_data:
@@ -56,11 +58,11 @@ def main_questions(message):
     else:  
         if(message.text in corpse):
             msg = responses[corpse.index(message.text)][0]
-            print(f"{bot_name}: "+msg)
+            print(f"{main.bot_name}: "+msg)
             mess = msg
         else:
             msg = 'You must click one of the options!'
-            print(f"{bot_name}: "+msg)
+            print(f"{main.bot_name}: "+msg)
             mess = msg
     
         
@@ -189,7 +191,7 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
         bot.send_message(message.chat.id, mess)
         # encoding and decoding 
         
-        indexs , probs = main.model_process(model,tokenizer,sent,max_length)
+        indexs , probs = main.model_process(main.model,tokenizer,sent,max_length)
         prob = probs[0]
         index = indexs[0]
 
@@ -282,8 +284,6 @@ def record_correct_response(message,sents_indexs):
         
         other_answer.remove(other_answer[int(ans)])
          
-
-
     # redirect to recommeded
     
     redirect_to_model(message,sents,other_answer)
@@ -291,12 +291,12 @@ def record_correct_response(message,sents_indexs):
 
 
     
-def satisfaction(message,sents_indexs):
+def satisfaction(message,sents_other_answer):
     
-    other_answer = sents_indexs[1]
+    other_answer = sents_other_answer[1]
     print(f'other anwer {other_answer}')
     print(len(other_answer))
-    sents = sents_indexs[0]
+    sents = sents_other_answer[0]
  
     if(message.text == 'Yes'):
         main.record.response = other_answer[0]
@@ -305,7 +305,7 @@ def satisfaction(message,sents_indexs):
         
         #write into database
         now = datetime.now()
-        now_russia = eastern_tz.localize(now)
+        now_russia = main.eastern_tz.localize(now)
                 
         main.record.time = now_russia
         record_dialogue(main.record,'new_response')
@@ -313,6 +313,11 @@ def satisfaction(message,sents_indexs):
         
 
     elif(message.text == 'No'):
+        first_to_last = other_answer[0]
+        other_answer = other_answer[1:]
+        other_answer.append(first_to_last)
+        sents_other_answer[1] = other_answer
+
         mess = ''
         
         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
@@ -322,7 +327,7 @@ def satisfaction(message,sents_indexs):
             markup.add(str(index))
             
             found = query(other_answer[index])
-            mess += f'<b>NUMBER {index}.</b>'
+            mess += f'<b>No. {index}.</b>'
             mess += '\n'
             mess += random.choice(found)['responses'][0]
             mess += '\n'
@@ -336,7 +341,7 @@ def satisfaction(message,sents_indexs):
         mess = 'For better performance of system, please click the most correspondent response to your question, thank you for the feedback'    
         markup.add('None') 
         msg = bot.send_message(message.chat.id,mess, reply_markup=markup)
-        bot.register_next_step_handler(msg, record_correct_response,sents_indexs)
+        bot.register_next_step_handler(msg, record_correct_response,sents_other_answer)
         
     else:
         mess = ''

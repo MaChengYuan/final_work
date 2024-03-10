@@ -1,7 +1,7 @@
-import time
 
+import time
+from telebot import types
 import json
-import torch
 import argparse, os
 import pandas as pd
 import datetime 
@@ -15,6 +15,10 @@ from function import *
 import torch
 import pytz
 from datetime import datetime
+
+import sys, os
+sys.path.append('/opt/homebrew/bin/pip')
+
 eastern_tz = pytz.timezone('Europe/Moscow')
 
 class Record():
