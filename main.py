@@ -1,5 +1,5 @@
 import time
-from telebot import types
+
 import json
 import torch
 import argparse, os
