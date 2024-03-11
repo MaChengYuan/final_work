@@ -109,7 +109,7 @@ def record_dialogue(record,name):
     mydb = myclient["itmo_data"]
     mycol = mydb[name]
     #mycol = mydb["customers"]
-    now = datetime.now()
+    now = datetime.datetime.now()
     now_russia = main.eastern_tz.localize(now)            
 
     mydict = { "name": record.name , "id": record.id, "message": record.message, "predicted":record.predicted, "response":record.response ,"time": now_russia }   

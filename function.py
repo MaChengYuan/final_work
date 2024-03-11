@@ -110,7 +110,7 @@ def recommendations(message,advice_options):
         
         bot.send_message(message.chat.id,mess)
         time.sleep(3)
-        restart(message)
+        main.restart(message)
     elif(len(advice_options) == 1):
         questions =  advice_options
     else:
@@ -123,7 +123,7 @@ def recommendations(message,advice_options):
     for index in range(len(questions)):            
         found = query(questions[index])
         
-        markup.add(f'''{index} {random.choice(found)['patterns'][0]}''')
+        markup.add(f'''{index}. {random.choice(found)['patterns'][0]}''')
 
     markup.add('None')
     mess = f'Below are options'
@@ -173,7 +173,7 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
             bot.send_message(message.chat.id,mess)
             
             time.sleep(5)
-            restart(message)
+            main.restart(message)
         else:
             mess = f'Here are some related questions that you might be interested'
             mess += '\n'
@@ -191,7 +191,7 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
         bot.send_message(message.chat.id, mess)
         # encoding and decoding 
         
-        indexs , probs = main.model_process(main.model,tokenizer,sent,max_length)
+        indexs , probs = main.model_process(main.model,main.tokenizer,sent,max_length)
         prob = probs[0]
         index = indexs[0]
 
@@ -351,7 +351,7 @@ def satisfaction(message,sents_other_answer):
         
         msg = bot.send_message(message.chat.id,mess)
         time.sleep(3)
-        restart(message)
+        main.restart(message)
 
 def redirect_to_model(message,sents,advice_option):
     sents = sents
@@ -369,5 +369,5 @@ def redirect_to_model(message,sents,advice_option):
     bot.send_message(message.chat.id,mess)
 
     max_length = 64
-    model_decode(model,tokenizer,sents,max_length,message,advice_option)
+    model_decode(main.model,main.tokenizer,sents,max_length,message,advice_option)
     
