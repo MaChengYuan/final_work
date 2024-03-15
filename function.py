@@ -1,13 +1,21 @@
 # in case for backup
-from main import *
+
 import main
-from mongodb import *
-import spacy
+import mongodb_read
 import random
+import time
 import re
+import json
 from torch import nn
 from datetime import datetime
-
+from telebot import types
+import tokens
+from nltk.tokenize import wordpunct_tokenize
+import nltk
+from nltk.corpus import stopwords
+ 
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
 
 
 with open('/Users/mac/Desktop/SCIENTIFIC_RESEARCH/main_QA.json', 'r') as json_data:
@@ -23,14 +31,16 @@ for intent in main_intents['intents']:
 
 
 
+
 corpse = ['requirement','scholarships','batchmates','research topics','internship']
 main_index = [0,1,2,3,4,5]
-mycol = mongodb_atlas('original')
+mycol = mongodb_read.mongodb_atlas('training_data')
 
 responses = []
 for i in range(len(main_index)):
     x = mycol.find_one({'tag':main_index[i]})
     responses.append(x['responses'])
+
 
 
 def main_questions_function(call):
@@ -43,21 +53,22 @@ def main_questions_function(call):
         id = call.message.chat.id
     except :
         id = call.chat.id
-    msg = bot.send_message(id,mess, reply_markup=markup)
-    types.ReplyKeyboardRemove()
-    bot.register_next_step_handler(msg, main_questions)
+
+    msg = main.bot.send_message(id,mess, reply_markup=markup)
+    main.bot.register_next_step_handler(msg, main_questions)
 
 def main_questions(message):
+    print('hi')
     mess = None
     if(message.text == 'None'):
         mess = 'redirecting to menu ...'
-        bot.send_message(message.chat.id, mess,reply_markup=types.ReplyKeyboardRemove())
+        main.bot.send_message(message.chat.id, mess,reply_markup=types.ReplyKeyboardRemove())
 
         time.sleep(3)
         main.restart(message)
     else:  
         if(message.text in corpse):
-            msg = responses[corpse.index(message.text)][0]
+            msg = responses[corpse.index(message.text)]
             print(f"{main.bot_name}: "+msg)
             mess = msg
         else:
@@ -66,7 +77,7 @@ def main_questions(message):
             mess = msg
     
         
-        bot.send_message(message.chat.id, mess,reply_markup=types.ReplyKeyboardRemove())
+        main.bot.send_message(message.chat.id, mess,reply_markup=types.ReplyKeyboardRemove())
     
         time.sleep(5)
         main_questions_function(message)
@@ -108,7 +119,7 @@ def recommendations(message,advice_options):
         mess += '\n'
         mess += 'redirect to main page ... '
         
-        bot.send_message(message.chat.id,mess)
+        main.bot.send_message(message.chat.id,mess)
         time.sleep(3)
         main.restart(message)
     elif(len(advice_options) == 1):
@@ -121,48 +132,52 @@ def recommendations(message,advice_options):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
     
     for index in range(len(questions)):            
-        found = query(questions[index])
+        found = mongodb_read.query(questions[index])
         
         markup.add(f'''{index}. {random.choice(found)['patterns'][0]}''')
-
+    markup.add('I want to write')
     markup.add('None')
+
     mess = f'Below are options'
     mess += '\n'
-    msg = bot.send_message(message.chat.id,mess, reply_markup=markup)
+    msg = main.bot.send_message(message.chat.id,mess, reply_markup=markup)
     
-    bot.register_next_step_handler(msg, recommendations_decode,advice_options)
+    main.bot.register_next_step_handler(msg, recommendations_decode,advice_options)
         
 
 def recommendations_decode(message,questions):
     if(message.text == 'None'):
         mess = 'redirect to main page ... '      
-        bot.send_message(message.chat.id,mess)
+        main.bot.send_message(message.chat.id,mess)
         time.sleep(3)
-        restart(message)
-    else:
-        
+        main.restart(message)
+    elif(message.text == 'I want to write'):
+        msg = main.bot.send_message(message.chat.id, 'please write your questions')
+        main.bot.register_next_step_handler(msg, main.more_questions)
+    else:     
         questions = questions
-        select_index = int(message.text.split(' ')[0])
+        print(message.text)
+        select_index = int(message.text.split('.')[0])
 
         # for future RNN recommendation record
         
         main.record.predicted = None
         main.record.message = None
         main.record.response = select_index
-        record_dialogue(main.record,'new_response')
+        mongodb_read.record_dialogue(main.record,'new_response')
         
         print(questions[select_index])
         
         mess = ''
-        found = query(questions[select_index])
+        found = mongodb_read.query(questions[select_index])
         
         mess += random.choice(found)['responses'][0]
-        bot.send_message(message.chat.id,mess)
+        main.bot.send_message(message.chat.id,mess)
         questions.remove(questions[select_index])
         
         time.sleep(2)  
         mess = 'More recommendations below'
-        bot.send_message(message.chat.id,mess)
+        main.bot.send_message(message.chat.id,mess)
         recommendations(message,questions)
 
 def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None):
@@ -170,7 +185,7 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
     if(len(sents) == 0):
         if(advice_options == None):
             mess = 'redirect to main page'
-            bot.send_message(message.chat.id,mess)
+            main.bot.send_message(message.chat.id,mess)
             
             time.sleep(5)
             main.restart(message)
@@ -178,7 +193,7 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
             mess = f'Here are some related questions that you might be interested'
             mess += '\n'
             
-            bot.send_message(message.chat.id,mess)
+            main.bot.send_message(message.chat.id,mess)
             recommendations(message,advice_options)            
     else:
         sent = sents[0]
@@ -188,7 +203,7 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
         print()
         
         mess = 'Processing ... (it may takes 5 - 10 seconds)'
-        bot.send_message(message.chat.id, mess)
+        main.bot.send_message(message.chat.id, mess)
         # encoding and decoding 
         
         indexs , probs = main.model_process(main.model,main.tokenizer,sent,max_length)
@@ -206,15 +221,17 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
 
         time.sleep(2)
         mess = ''
-        if(prob > 0.15):
-            found = query(index)
+        if(prob > 0.85):
+            found = mongodb_read.query(index)
             main.record.message = sent
             main.record.predicted = index
-            
+
+            mess = f'To question : <b>{sent}</b>'
+            mess = '\n'
             mess = random.choice(found)['responses'][0]
             print(mess)
             print()
-            bot.send_message(message.chat.id, mess)
+            main.bot.send_message(message.chat.id, mess, parse_mode='html')
         
             #feedback
             time.sleep(5)
@@ -222,17 +239,17 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
             markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
             markup.add('Yes') 
             markup.add('No') 
-            msg = bot.send_message(message.chat.id,mess, reply_markup=markup)
+            msg = main.bot.send_message(message.chat.id,mess, reply_markup=markup)
     
             
             
-            bot.register_next_step_handler(msg, satisfaction,sents_indexs)
+            main.bot.register_next_step_handler(msg, satisfaction,sents_indexs)
         
         else:
             main.record.message = sent
             main.record.predicted = None
             mess = "Sorry I am unable to Process Your Request"
-            bot.send_message(message.chat.id, mess)
+            main.bot.send_message(message.chat.id, mess)
 
             markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
 
@@ -246,7 +263,7 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
 
                 markup.add(str(index))
                 
-                found = query(indexs[index])
+                found = mongodb_read.query(indexs[index])
 
                 mess += f'NUMBER {index}.'
                 mess += '\n'
@@ -254,39 +271,59 @@ def model_decode(model ,tokenizer,sents,max_length,message,advice_options = None
                 mess += '\n'
                 mess += '\n'
 
-            bot.send_message(message.chat.id,mess)
+            main.bot.send_message(message.chat.id,mess)
 
         
             mess = 'For better performance of system, please click the most correspondent response to your question, thank you for the feedback'    
             markup.add('None') 
-            msg = bot.send_message(message.chat.id,mess, reply_markup=markup)
-            bot.register_next_step_handler(msg, record_correct_response,sents_indexs)
+            msg = main.bot.send_message(message.chat.id,mess, reply_markup=markup)
+            main.bot.register_next_step_handler(msg, record_correct_response,sents_indexs)
     
 
 
+def detect_meaningless_sentence(str):
+    def clean_punctuation(string):
+        try:
+            res = re.sub(r'[^\w\s]', '', string)
+            return res
+        except:
+            return string
+            
+    x = clean_punctuation(str)
+    x = wordpunct_tokenize(x)
+    x = [w for w in x if not w.lower() in stop_words]
+
+    return x
 
 
-def record_correct_response(message,sents_indexs):
-    other_answer = sents_indexs[1]
-    sents = sents_indexs[0]
+def record_correct_response(message,sents_other_answer):
+    other_answer = sents_other_answer[1]
+    sents = sents_other_answer[0]
     ans = message.text
-    if(ans == 'None'):
-        
+
+    detect_tokens = detect_meaningless_sentence(sents)
+    if(detect_tokens < 1 ):
         main.record.response = None
-        record_dialogue(main.record,'unknown_response')
-        
+        mongodb_read.record_dialogue(main.record,'trash')
+        redirect_to_model(message,sents,other_answer)
     else:
-        main.record.response = other_answer[int(ans)]
+        if(ans == 'None'):
+            
+            main.record.response = None
+            mongodb_read.record_dialogue(main.record,'unknown_response')
+            
+        else:
+            main.record.response = other_answer[int(ans)]
+            
+            #write into database
+            
+            mongodb_read.record_dialogue(main.record,'new_response')
+            
+            other_answer.remove(other_answer[int(ans)])
+            
+        # redirect to recommeded
         
-        #write into database
-        
-        record_dialogue(main.record,'new_response')
-        
-        other_answer.remove(other_answer[int(ans)])
-         
-    # redirect to recommeded
-    
-    redirect_to_model(message,sents,other_answer)
+        redirect_to_model(message,sents,other_answer)
 
 
 
@@ -297,20 +334,24 @@ def satisfaction(message,sents_other_answer):
     print(f'other anwer {other_answer}')
     print(len(other_answer))
     sents = sents_other_answer[0]
- 
+    now = datetime.now()
+    now_russia = tokens.eastern_tz.localize(now)
+    main.record.time = now_russia
+
     if(message.text == 'Yes'):
         main.record.response = other_answer[0]
         other_answer = other_answer[1:]
-
-        
         #write into database
-        now = datetime.now()
-        now_russia = main.eastern_tz.localize(now)
-                
-        main.record.time = now_russia
-        record_dialogue(main.record,'new_response')
-        redirect_to_model(message,sents,other_answer)
-        
+
+        detect_tokens = detect_meaningless_sentence(sents)
+
+        if(detect_tokens < 1 ):
+            mongodb_read.record_dialogue(main.record,'trash')
+            redirect_to_model(message,sents,other_answer)
+        else:
+            mongodb_read.record_dialogue(main.record,'new_response')
+            redirect_to_model(message,sents,other_answer)
+            
 
     elif(message.text == 'No'):
         first_to_last = other_answer[0]
@@ -326,7 +367,7 @@ def satisfaction(message,sents_other_answer):
 
             markup.add(str(index))
             
-            found = query(other_answer[index])
+            found = mongodb_read.query(other_answer[index])
             mess += f'<b>No. {index}.</b>'
             mess += '\n'
             mess += random.choice(found)['responses'][0]
@@ -334,14 +375,14 @@ def satisfaction(message,sents_other_answer):
             mess += '\n'
                 
                 #print(random.choice(intent['responses']))
-        bot.send_message(message.chat.id,mess, parse_mode='html')
+        main.bot.send_message(message.chat.id,mess, parse_mode='html')
 
         
         mess += '\n'
         mess = 'For better performance of system, please click the most correspondent response to your question, thank you for the feedback'    
         markup.add('None') 
-        msg = bot.send_message(message.chat.id,mess, reply_markup=markup)
-        bot.register_next_step_handler(msg, record_correct_response,sents_other_answer)
+        msg = main.bot.send_message(message.chat.id,mess, reply_markup=markup)
+        main.bot.register_next_step_handler(msg, record_correct_response,sents_other_answer)
         
     else:
         mess = ''
@@ -349,7 +390,7 @@ def satisfaction(message,sents_other_answer):
         mess = '\n'
         mess = 'redirect to main page ...'
         
-        msg = bot.send_message(message.chat.id,mess)
+        msg = main.bot.send_message(message.chat.id,mess)
         time.sleep(3)
         main.restart(message)
 
@@ -366,8 +407,9 @@ def redirect_to_model(message,sents,advice_option):
     mess += '\n'
     mess += "Or you may write email to coordinator with aakarabintseva@itmo.ru"
     
-    bot.send_message(message.chat.id,mess)
+    main.bot.send_message(message.chat.id,mess)
 
+    time.sleep(5)
     max_length = 64
     model_decode(main.model,main.tokenizer,sents,max_length,message,advice_option)
     

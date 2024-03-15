@@ -2,22 +2,24 @@ import pandas as pd
 import matplotlib 
 matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
-from main import *
-from mongodb import *
+import main 
+import mongodb_read 
+import numpy as np
 
-@bot.message_handler(commands=['statistics'])
+
+
 def show_statistics(message):
     # 
-    mycol = mongodb_atlas('new_response')
+    mycol = mongodb_read.mongodb_atlas('new_response')
     x = mycol.find()    
     df = pd.DataFrame(list(x))
     
-    mycol = mongodb_atlas('new_response')
+    mycol = mongodb_read.mongodb_atlas('new_response')
     x = mycol.find()    
     df_new = pd.DataFrame(list(x))
     df_new  = df_new.dropna(subset = ['message'])
 
-    mycol = mongodb_atlas('training_data')
+    mycol = mongodb_read.mongodb_atlas('training_data')
     x = mycol.find()    
     df_train = pd.DataFrame(list(x))
     df['accuracy'] = np.where(df['predicted'] == df['response'],1,0)
@@ -33,7 +35,7 @@ def show_statistics(message):
     #auto retrain
     if((accuracy < 0.7) & (len(df_new)>30)):
         pass
-        retrain()
+
         
     # visitors plot by week
     df['accuracy'] = df['accuracy'].apply(lambda x : None if x==0 else x)
@@ -43,13 +45,14 @@ def show_statistics(message):
     x.time = x.time.apply(lambda x : f'''{str(x).split('-')[1]}-{str(x).split('-')[2]}''')
     x.time = x.time.apply(lambda x : f'''{str(x).split(' ')[0]}''')
     
-    
-    plt.bar(x.time.tolist(), x.message.tolist(), edgecolor='purple', color='None')
-    plt.plot(x.time.tolist(), x.accuracy.tolist())
+    # only print last 10 weeks
+    plt.bar(x.time.tolist()[:10], x.message.tolist()[:10], edgecolor='purple', color='None')
+    plt.plot(x.time.tolist()[:10], x.accuracy.tolist()[:10])
+    plt.yticks(x.message.tolist()[:10])
     plt.savefig("visitors.png") 
     plt.show()
     
-    bot.send_photo(message.chat.id, photo=open('visitors.png', 'rb'))
+    main.bot.send_photo(message.chat.id, photo=open('visitors.png', 'rb'))
     
     # ranking for questions
     indexs = df.response.value_counts().index.tolist()
@@ -61,8 +64,9 @@ def show_statistics(message):
     for i,c in zip(indexs[:5],counts[:5]):
         mess +=f"{i} : {c}"
         mess += "\n"
-    bot.send_message(message.chat.id, mess)
+    main.bot.send_message(message.chat.id, mess)
 
+    plt.yticks(counts)
     plt.bar(indexs,counts)
     
       
@@ -71,6 +75,5 @@ def show_statistics(message):
     plt.savefig("topics.png") 
     plt.show()
       
-    bot.send_photo(message.chat.id, photo=open('topics.png', 'rb'))
-    time.sleep(3)
-    restart(message)
+    main.bot.send_photo(message.chat.id, photo=open('topics.png', 'rb'))
+
