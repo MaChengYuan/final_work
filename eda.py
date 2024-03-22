@@ -235,8 +235,8 @@ def eda(sentence, alpha_sr=0.1, alpha_ri=0.1, alpha_rs=0.1, p_rd=0.1, num_aug=9 
 
 def gen_eda(df , output_file, alpha, num_aug=1, reverse = False):
 
-    sentence = df['sentence']
-    label = df['label'].astype(str)
+    sentence = df['sentence'].tolist()
+    label = df['label'].astype(str).tolist()
     
     writer = open(output_file, 'w')
     y = label

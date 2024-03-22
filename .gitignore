@@ -1,3 +1,12 @@
 main_QA.json
 requirements.txt
 itmo_model.pt
+main_bot
+transformers_cache
+recommendation.pth
+squares.png
+topics.png
+visitors.png
+password.txt
+.ipynb_checkpoints
+transformers_cache

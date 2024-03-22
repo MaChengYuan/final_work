@@ -2,7 +2,6 @@
 import mongodb_read 
 #model
 import NLPmodel 
-import main
 
 # import libraries
 import random
@@ -13,13 +12,13 @@ import pandas as pd
 import re
 import torch
 from transformers import RobertaTokenizer
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch import nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
-import seaborn as sn
 from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
 import warnings
 import os
@@ -28,6 +27,9 @@ from nltk.corpus import stopwords
 from nltk.tokenize import wordpunct_tokenize
 nltk.download('stopwords')
 warnings.filterwarnings("ignore", category=UserWarning)
+
+from eda import gen_eda
+from cPosGpt2 import train_cposgpt2_and_augment
 
 def set_seed(seed_value):
     """Set seed for reproducibility.
@@ -38,12 +40,9 @@ def set_seed(seed_value):
     # torch.cuda.manual_seed_all(seed_value)
 
 
-# set parameters
-
-
 scl_model_path = r"itmo_model.pt"
 cross_model_path = r"itmo_model.pt"
-
+stop_words = set(stopwords.words('english'))
 
 # a function for preprocessing text
 def text_preprocessing(text):
@@ -107,15 +106,10 @@ def preprocessing_for_bert(tokenizer,data, MAX_LEN):
 
     return input_ids, attention_masks
 
-
-
-# preparing data
 def prepare_data(tokenizer,train_ds,val_ds=None,aug_path = None,sample_num = 10 , seed = 32, all=True , aug = False,aug_num = 6):
     # load data
     # for tsv
     # there is no valid_path
-    
-
       
     global num_classes
     num_classes = len(train_ds['label'].unique())
@@ -133,24 +127,20 @@ def prepare_data(tokenizer,train_ds,val_ds=None,aug_path = None,sample_num = 10 
     #print(train_df.head(3))
     # data augmentation 
     if(aug == True):
-        indexs = train_df.index.values.tolist()
-        aug_ds =  pd.read_csv(aug_path, sep='\t')
-        aug_df = [aug_ds[i*aug_num:i*aug_num+aug_num] for i in
-                            indexs]
+        #indexs = train_df.index.values.tolist()
+        aug_df =  pd.read_csv(aug_path, sep='\t')
+        #aug_df = [aug_ds[i*aug_num:i*aug_num+aug_num] for i in indexs]
         
         #print(aug_df[:aug_num*2])
         aug_df = pd.concat(aug_df, axis=0).sample(frac=1)
-
         train_df = pd.concat([train_df,aug_df], axis=0).sample(frac=1).reset_index(drop=True)
     
     if(val_ds == None):
         sample = 5
         
-        val_df = [train_df.loc[train_df.label == i].sample(n=sample, random_state=seed) for i in
+        val_df = [train_df.loc[train_df.label == i].sample(n=sample,replace = True, random_state=seed) for i in
                     train_df.label.unique()]
         val_df = pd.concat(val_df, axis=0).sample(frac=1).reset_index(drop=True)
-    # random 20 per class sample for validation
-
 
     
     train_text = train_df["sentence"].tolist()
@@ -336,9 +326,7 @@ class EarlyStopper:
             if self.counter >= self.patience:
                 return True
         return False
-
-
-
+    
 def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloader=None, evaluation=False,patience = 25):
     """Train the BertClassifier model.
     """
@@ -360,7 +348,6 @@ def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloa
         print(
             f"{'Epoch':^7} | {'Batch':^7} | {'Train Loss':^12} | {'Train Accuracy':^12} | {'Val Loss':^10} | {'Val Acc':^9} | {'Elapsed':^9}")
         print("-" * 86)
-
         # Measure the elapsed time of each epoch
         t0_epoch, t0_batch = time.time(), time.time()
 
@@ -469,8 +456,6 @@ def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloa
     return best_validation_loss, val_accuracy
 
 
-
-
 from tqdm import tqdm
 def test_evaluate(model,model_path, test_dataloader,hidden=16,num_labels=2,feature_remove_max=False):
     """After the completion of each training epoch, measure the model's performance
@@ -504,15 +489,6 @@ def test_evaluate(model,model_path, test_dataloader,hidden=16,num_labels=2,featu
         preds = torch.argmax(logits, dim=1).flatten()
         predict += preds.tolist()
         y_true += b_labels.tolist()
-
-    # plot heatmap
-    test_accuracy = np.mean(test_accuracy)
-    cm = confusion_matrix(y_true, predict)
-    plt.figure(figsize=(10, 7))
-    sn.heatmap(cm, annot=True)
-    plt.xlabel('Predicted Label')
-    plt.ylabel('True Label')
-    plt.show()
 
     # Accuracy
     print(f'Accuracy: {accuracy_score(y_true, predict)}')
@@ -565,11 +541,61 @@ def model_predict(model,hidden, model_path, test_dataloader):
 
     return all_logits
 
+# delete defect column : time is None , label = string , message from users has not insufficient information
+def clean_db(df):
+    #drop time = null
+    time_na = df[df['time'].isna()]
+    df = df.dropna(subset=['time']).reset_index(drop=True)
+    for i in time_na._id:
+        try:
+            mycol = mongodb_read.mongodb_atlas('new_response')
+            mycol.delete_one({'_id':i})
+        except:
+            print('something wrong happen')
+            pass
 
-from eda import gen_eda
-from cPosGpt2 import train_cposgpt2_and_augment
+    #drop label = str
+    label_non_str = df[df['response'].apply(lambda x: isinstance(x, str))]
+    df = df[~df['response'].apply(lambda x: isinstance(x, str))]
+    
+    for i in label_non_str._id:
+        try:
+            mycol = mongodb_read.mongodb_atlas('new_response')
+            mycol.delete_one({'_id':i})
+        except:
+            print('something wrong happen')
+            pass
+
+    # remove datasets generated from recommendation
+    df = df.dropna(subset = ['message']).reset_index(drop=True)
+
+    # locate data = None afte clean
+    df['clean'] = df.message.apply(lambda x: clean_punctuation(x))
+    df['clean'] = df.clean.apply(lambda x: wordpunct_tokenize(x))
+    df['clean'] = df.clean.apply(lambda x: [w for w in x if not w.lower() in stop_words])
+    defect_message = df[df['clean'].apply(lambda x: len(x)==0)]
+    for i in defect_message._id:
+        try:
+            mycol.delete_one({'_id':i})
+        except:
+            print('something wrong happen')
+            pass
+        
+    df = df[df['clean'].apply(lambda x: len(x)!=0)]
+       
+    print(f"Datasets are cleansed")
+    return df
+
+def clean_punctuation(string):
+        try:
+            res = re.sub(r'[^\w\s]', '', string)
+            return res
+        except:
+            return string
+
+
 def train_process():
-    MAX_LEN = 40
+    MAX_LEN = 64
     epoch =40 # number of epochs
 
     scl = True  # if True -> scl + cross entropy loss. else just cross entropy loss
@@ -584,12 +610,13 @@ def train_process():
     num_aug = 6
     # for pos_gpt2
     second_num_aug = 4
-    
 
     # original datasets plus new_responses 
     mycol = mongodb_read.mongodb_atlas('new_response')
     x = mycol.find()    
     df = pd.DataFrame(list(x))
+    # clean and remove unneccesary training datas
+    df = clean_db(df)
     df = df[['response','message']]
     new = df.rename(columns={'response':'label','message':'sentence'})
 
@@ -597,28 +624,15 @@ def train_process():
     x = mycol.find()    
     df = pd.DataFrame(list(x))
     df = df.rename(columns={'tag':'label','patterns':'sentence'})
-    train = df[['label','sentence']]
+    traindf = df[['label','sentence']]
 
-    df = pd.concat([train, new], axis=0).sample(frac=1).reset_index(drop=True)
+    df = pd.concat([traindf, new], axis=0).sample(frac=1).reset_index(drop=True)
 
-    # preprocess
-    df = df.dropna()
-    def clean_punctuation(string):
-        try:
-            res = re.sub(r'[^\w\s]', '', string)
-            return res
-        except:
-            return string
-        
-    stop_words = set(stopwords.words('english'))
+    #dropna in case 
+    df = df.dropna(subset = ['sentence']).reset_index(drop=True)
 
-    df['clean'] = df.sentence.apply(lambda x: clean_punctuation(x))
-    df['clean'] = df.sentence.apply(lambda x: wordpunct_tokenize(x))
-    df['clean'] = df.clean.apply(lambda x: [w for w in x if not w.lower() in stop_words])
 
-    #confirm sentences are more than 0 word
-    df = df[df.clean.map(len)>0]
-
+    
     df = df[['label','sentence']]
 
 
@@ -664,13 +678,9 @@ def train_process():
     val_df = pd.concat(val_df, axis=0).sample(frac=1)
 
     
-    train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,
-                               file_name=file_name,seed = 1234,max_seq_length = 64,sample_num=second_num_aug,num_train_epochs=3)
-    
-    
+    train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,file_name=file_name,seed = 1234,max_seq_length = MAX_LEN,sample_num=second_num_aug,num_train_epochs=5)
+
     aug_path = f'{output_file}/posgpt2_eda.tsv'
-
-
 
     set_seed(seed)
     print('pre-process phase')
@@ -680,7 +690,7 @@ def train_process():
     
     # without contrasive loss
     
-    bert_classifier, optimizer = initialize_model(QModel_Classifier,hidden=hidden,num_labels = num_classes)
+    bert_classifier, optimizer = initialize_model(NLPmodel.QModel_Classifier,hidden=hidden,num_labels = num_classes)
     scl = False
 
     print('training phase')
@@ -693,4 +703,5 @@ def train_process():
 if __name__ == "__main__":
 
         train_process()
+        os.rmdir("main_bot")
     

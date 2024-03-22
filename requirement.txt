@@ -1,0 +1,8 @@
+telebot
+torch
+pymongo
+pandas
+matplotlib
+transformers
+nltk
+pytorch_lightning
