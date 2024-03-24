@@ -25,6 +25,10 @@ class admin_mode_or_no():
 in_admin = admin_mode_or_no()
 
 bot = telebot.TeleBot(token, parse_mode='None')
+c1 = types.BotCommand(command='start', description='Start the Bot')
+bot.set_my_commands([c1])
+bot.set_chat_menu_button(bot.get_me().id, types.MenuButtonCommands('commands'))
+
 
 @bot.message_handler(commands=['admin'])  
 def admin(message):
