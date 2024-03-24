@@ -5,7 +5,8 @@ import mongodb_read
 import random
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
+import pandas as pd
 from telebot import types
 import tokens
 from nltk.tokenize import wordpunct_tokenize
@@ -270,7 +271,7 @@ def recommendations_decode(message,questions_srs):
                 main.bot.send_message(message.chat.id,mess)
                 recommendations(message,questions)
     except:
-        main.delete_menu(message)
+        main.message_delete_menu(message)
         mess = 'probably you did not choose option from buttons, so error occurred'
         mess = '\n'
         mess += 'redirect to menu ...'
@@ -331,7 +332,7 @@ def model_decode(sents,max_length,message,advice_options = None):
             print(mess)
             print()
 
-            main.delete_menu(message)
+            main.message_delete_menu(message)
             main.bot.send_message(message.chat.id, mess, parse_mode='html')
         
             #feedback
@@ -454,9 +455,10 @@ def satisfaction(message,sents_other_answer):
     print(f'other anwer {other_answer}')
     print(len(other_answer))
     sents = sents_other_answer[0]
-    now = datetime.now()
-    now_russia = mongodb_read.eastern_tz.localize(now)
-    main.record.time = now_russia
+
+    now = datetime.now()    
+  
+    main.record.time = now
 
     if(message.text == 'Yes'):
         main.record.response = other_answer[0]

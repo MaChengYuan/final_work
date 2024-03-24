@@ -28,7 +28,7 @@ bot = telebot.TeleBot(token, parse_mode='None')
 
 @bot.message_handler(commands=['admin'])  
 def admin(message):
-    delete_menu(message)
+    message_delete_menu(message)
     print(in_admin.in_admin)
     if(in_admin.in_admin == True):
         mess = 'You are already in admin model'
@@ -98,43 +98,57 @@ def menu():
 
 
 
-@bot.message_handler(commands=['start'])  # Ответ на команду /start
+#@bot.message_handler(content_types=['text'])
 def start(message):
-    # admin model false
-    in_admin.in_admin = False
+    mess = 'Hi !!!'
+    bot.send_message(message.chat.id, mess)
 
-    mess = f'hi, <b>{message.from_user.first_name}</b>!\nI am - <b>{bot_name}</b>'
-    mess += f'\n'
+    mess = 'It seems like you do not have "start" button in your telegram\nPlease type /start manually to go to main page'
+    bot.send_message(message.chat.id, mess)
 
-    #detect if there is response from staff    
-    mycol = mongodb_read.mongodb_atlas('response_to_user')
-    x = mycol.find({'id':message.chat.id}) 
-    df = pd.DataFrame(list(x))
-    if(len(df)==0):
-        print(f'{message.chat.id} does not have response')
-    else:
-        list_of_res = df.response.tolist()
-        list_of_ques = df.message.tolist()
-        mess = f'you have responses from ITMO University'
-        for i in range(len(list_of_res)):
-            mycol.delete_one({'response':list_of_res[i]})
-            mess += f'\n'
-            mess += f'To your question : {list_of_ques[i]}'
-            mess += f'\n'
-            mess += f'\n'
-            found = mongodb_read.query(list_of_res[i],'original')
-            mess += random.choice(found)['responses'][0]
+@bot.message_handler(commands=['start']) 
+def start(message):
+
+    try:
+        # admin model false
+        in_admin.in_admin = False
+        mess = f'hi, <b>{message.from_user.first_name}</b>!\nI am - <b>{bot_name}</b>'
+        mess += f'\n'
+
+        #detect if there is response from staff    
+        mycol = mongodb_read.mongodb_atlas('response_to_user')
+        x = mycol.find({'id':message.chat.id}) 
+        df = pd.DataFrame(list(x))
+        if(len(df)==0):
+            print(f'{message.chat.id} does not have response')
+        else:
+            list_of_res = df.response.tolist()
+            list_of_ques = df.message.tolist()
+            mess = f'you have responses from ITMO University'
+            for i in range(len(list_of_res)):
+                mycol.delete_one({'response':list_of_res[i]})
+                mess += f'\n'
+                mess += f'To your question : {list_of_ques[i]}'
+                mess += f'\n'
+                mess += f'\n'
+                found = mongodb_read.query(list_of_res[i],'original')
+                mess += random.choice(found)['responses'][0]
+            
+        #record name and id 
+        record.id = message.chat.id
+        record.name = message.from_user.first_name
         
-    #record name and id 
-    record.id = message.chat.id
-    record.name = message.from_user.first_name
+        markup = menu()
+
+        global msg_id
+        msg_id = bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html').message_id
+    except:
+        mess = 'please click buttons'
+        bot.send_message(message.chat.id, mess)
+        time.sleep(2)
+        restart(message)
     
-    markup = menu()
 
-    global msg_id
-    msg_id = bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html').message_id
-
-    #bot.register_next_step_handler(msg, force_button_click)
 
 def restart(message):
     global msg_id
@@ -177,19 +191,21 @@ def more_questions(message):
     
     function.model_decode(sent,max_length,message)
 
-def delete_menu(call):
+def call_delete_menu(call):
     global msg_id
-    try:
-        bot.delete_message(call.from_user.id, msg_id)
-        msg_id = None
-    except:
-        bot.delete_message(call.chat.id, msg_id)
-        msg_id = None
+    bot.delete_message(call.message.chat.id, msg_id)
+    msg_id = None
+
+def message_delete_menu(message):
+    global msg_id
+
+    bot.delete_message(message.chat.id, msg_id)
+    msg_id = None
 
 @bot.callback_query_handler(func=lambda call: True)
 def message_reply(call):
     if call.data == 'contact':
-        delete_menu(call)
+        call_delete_menu(call)
         mess = 'click on mail to get contact with staff'
         bot.send_message(call.message.chat.id,mess)
 
@@ -205,7 +221,7 @@ Migration office -- aakhalilova@itmo.ru
         time.sleep(5)
         restart(call.message)
     elif call.data == 'help': 
-        delete_menu(call)
+        call_delete_menu(call)
         mess = """
 contact --  to find Email address of specific staff in ITMO
 main questions -- to answer most frequent questions from candidates
@@ -218,10 +234,10 @@ application -- to redirect to page to fill application
         time.sleep(5)
         restart(call.message)
     elif call.data == 'main questions':
-        delete_menu(call)
+        call_delete_menu(call)
         function.main_questions_function(call)
     elif call.data == 'more questions': 
-        delete_menu(call)
+        call_delete_menu(call)
         if(file_exist):          
              
             mess = 'please <b>clearly</b> write your questions \nIf multiple questions, please separate by <b>. or and</b>'
@@ -234,7 +250,7 @@ application -- to redirect to page to fill application
             restart(call.message)
 
     elif call.data == 'application':
-        delete_menu(call)
+        call_delete_menu(call)
         linked_user = 'https://signup.itmo.ru/master'
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton(text='redirect to ITMO',
@@ -246,7 +262,7 @@ application -- to redirect to page to fill application
 
     # admin mode
     elif call.data == 'correct_unknown_questions':
-        delete_menu(call)
+        call_delete_menu(call)
         mycol = mongodb_read.mongodb_atlas('unknown_response') 
         unknows = []
 
@@ -306,7 +322,7 @@ application -- to redirect to page to fill application
                 update_unknown_datasets(call.message)
     elif call.data == 'statistics_plot':
         try:
-            delete_menu(call)
+            call_delete_menu(call)
             statistics.show_statistics(call.message)
             time.sleep(10)
             restart(call.message)
@@ -314,6 +330,7 @@ application -- to redirect to page to fill application
             mess = f'There is something wrong , please contact to fix the problem' 
             msg = bot.send_message(call.message.chat.id,mess)
     else:
+        call_delete_menu(call)
         mess = 'probably you did not choose option from buttons, so error occurred'
         bot.send_message(call.message.chat.id,mess)
         time.sleep(10)
