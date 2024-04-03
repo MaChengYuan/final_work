@@ -11,7 +11,8 @@ from modules import SeqRec, SeqRecWithSampling
 from preprocess import add_time_idx
 import pickle
 from tqdm import tqdm
-import mongodb_read
+import retrain
+from transformers import AdamW
 
 class Args():
     def __init__(self):
@@ -44,7 +45,7 @@ class Args():
         self.top_k_metrics=10
         self.add_head = False
 
-        mycol = mongodb_read.mongodb_atlas('training_data')
+        mycol = retrain.mongodb_atlas('training_data')
         x = mycol.find() 
         df = pd.DataFrame(list(x))
         self.item_id_max = len(df.tag.value_counts())
@@ -332,10 +333,10 @@ def sequence_df(df,DA = False):
     return sequnce_df
 
 
-if __name__ == "__main__":
+def train_recommend():
     config = Args()
     
-    mycol = mongodb_read.mongodb_atlas('new_response')
+    mycol = retrain.mongodb_atlas('new_response')
     x = mycol.find() 
     df = pd.DataFrame(list(x))
 
@@ -347,6 +348,9 @@ if __name__ == "__main__":
     print(config.item_id_max)
     train(seqrec_module, train_loader,config,eval_loader = eval_loader)
 
+if __name__ == "__main__":
+    train_recommend()
+    
     # predict template
     #history = [0]
     #preds, scores = predict(config,history)

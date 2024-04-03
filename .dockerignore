@@ -3,7 +3,7 @@ requirements.txt
 #itmo_model.pt
 main_bot
 transformers_cache
-#recommendation.pth
+recommendation.pth
 squares.png
 topics.png
 visitors.png

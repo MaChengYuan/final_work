@@ -6,7 +6,7 @@ from torch import nn
 from tokens import token , password
 
 import mongodb_read 
-import statistics 
+import statistics_1 
 import NLPmodel 
 import function 
 import pandas as pd
@@ -73,7 +73,7 @@ class Args():
     
 args = Args()
 
-PATH = r"itmo_model.pt"
+PATH = r"main_bot/itmo_model.pt"
 
 file_exist = os.path.isfile(PATH)
 
@@ -327,12 +327,17 @@ application -- to redirect to page to fill application
     elif call.data == 'statistics_plot':
         try:
             call_delete_menu(call)
-            statistics.show_statistics(call.message)
+            statistics_1.show_statistics(call.message)
             time.sleep(10)
             restart(call.message)
         except:
             mess = f'There is something wrong , please contact to fix the problem' 
             msg = bot.send_message(call.message.chat.id,mess)
+
+    # change_password
+    elif call.data == 'change_password':
+        call_delete_menu(call)
+        bot.register_next_step_handler(msg, change_password)
     else:
         call_delete_menu(call)
         mess = 'probably you did not choose option from buttons, so error occurred'
@@ -362,7 +367,8 @@ def admin_confirm(message):
 def admin_menu():
     
     markup = types.InlineKeyboardMarkup() 
-    markup.add(types.InlineKeyboardButton('correct_unknown_questions', callback_data='correct_unknown_questions'))    
+    markup.add(types.InlineKeyboardButton('correct_unknown_questions', callback_data='correct_unknown_questions')) 
+    markup.add(types.InlineKeyboardButton('change password', callback_data='change_password'))    
     markup.add(types.InlineKeyboardButton('statistics', callback_data='statistics_plot'))    
     return markup
 
@@ -503,3 +509,18 @@ def insert_new_topic(message,one_unknown):
     mess = '1 new topic successfully updated'
     bot.send_message(message.chat.id,mess)
     update_unknown_datasets(message)
+
+def change_password(message):
+    new_password = message.text
+
+    with open("password.txt", "r") as f:
+        lines = f.readlines()
+        lines[0] = new_password
+        
+        with open("password.txt",'w') as txt:
+            txt.writelines(lines)
+            
+    mess = 'Please save password safely'
+    bot.send_message(message.chat.id,mess)
+    time.sleep(2)
+    admin_start()

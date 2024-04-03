@@ -1,5 +1,3 @@
-#mongodb
-import mongodb_read 
 #model
 import NLPmodel 
 
@@ -12,13 +10,13 @@ import pandas as pd
 import re
 import torch
 from transformers import RobertaTokenizer
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import AdamW
 
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch import nn
-import torch.nn.functional as F
+
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
+
 from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
 import warnings
 import os
@@ -30,6 +28,20 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 from eda import gen_eda
 from cPosGpt2 import train_cposgpt2_and_augment
+
+import tokens
+import pymongo
+
+token = tokens.token2
+myclient = pymongo.MongoClient(token)
+
+def mongodb_atlas(table_name):
+    
+    mydb = myclient["itmo_data"]
+
+    mycol = mydb[table_name]
+
+    return mycol
 
 def set_seed(seed_value):
     """Set seed for reproducibility.
@@ -129,10 +141,9 @@ def prepare_data(tokenizer,train_ds,val_ds=None,aug_path = None,sample_num = 10 
     if(aug == True):
         #indexs = train_df.index.values.tolist()
         aug_df =  pd.read_csv(aug_path, sep='\t')
-        #aug_df = [aug_ds[i*aug_num:i*aug_num+aug_num] for i in indexs]
-        
+        #aug_df = [aug_ds[i*aug_num:i*aug_num+aug_num] for i in indexs]        
         #print(aug_df[:aug_num*2])
-        aug_df = pd.concat(aug_df, axis=0).sample(frac=1)
+        #aug_df = pd.concat(aug_df, axis=0).sample(frac=1)
         train_df = pd.concat([train_df,aug_df], axis=0).sample(frac=1).reset_index(drop=True)
     
     if(val_ds == None):
@@ -548,7 +559,7 @@ def clean_db(df):
     df = df.dropna(subset=['time']).reset_index(drop=True)
     for i in time_na._id:
         try:
-            mycol = mongodb_read.mongodb_atlas('new_response')
+            mycol = mongodb_atlas('new_response')
             mycol.delete_one({'_id':i})
         except:
             print('something wrong happen')
@@ -560,7 +571,7 @@ def clean_db(df):
     
     for i in label_non_str._id:
         try:
-            mycol = mongodb_read.mongodb_atlas('new_response')
+            mycol = mongodb_atlas('new_response')
             mycol.delete_one({'_id':i})
         except:
             print('something wrong happen')
@@ -612,7 +623,7 @@ def train_process():
     second_num_aug = 4
 
     # original datasets plus new_responses 
-    mycol = mongodb_read.mongodb_atlas('new_response')
+    mycol = mongodb_atlas('new_response')
     x = mycol.find()    
     df = pd.DataFrame(list(x))
     # clean and remove unneccesary training datas
@@ -620,7 +631,7 @@ def train_process():
     df = df[['response','message']]
     new = df.rename(columns={'response':'label','message':'sentence'})
 
-    mycol = mongodb_read.mongodb_atlas('training_data')
+    mycol = mongodb_atlas('training_data')
     x = mycol.find()    
     df = pd.DataFrame(list(x))
     df = df.rename(columns={'tag':'label','patterns':'sentence'})
@@ -647,24 +658,21 @@ def train_process():
     output_dir = os.path.join(output_file, file_name)
     gen_eda(df,output_dir , alpha=alpha, num_aug=num_aug , reverse = False)
     
-    #from transformers import GPTNeoForCausalLM
+    from transformers import GPTNeoForCausalLM
     from transformers import GPT2Tokenizer
-    from transformers import GPT2LMHeadModel
+    #from transformers import GPT2LMHeadModel
     
     #gpt2
     print('GPT phase')
     
     
     GPT2_MODEL = 'gpt2'
-    model = GPT2LMHeadModel.from_pretrained(GPT2_MODEL,
-                                            cache_dir='transformers_cache')
+    #model = GPT2LMHeadModel.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
     
-    tokenizer = GPT2Tokenizer.from_pretrained(GPT2_MODEL,
-                                                  do_lower_case=True,
-                                              cache_dir='transformers_cache')
+    tokenizer = GPT2Tokenizer.from_pretrained(GPT2_MODEL,do_lower_case=True,cache_dir='transformers_cache')
     
-    #GPT2_MODEL = 'EleutherAI/gpt-neo-1.3B' 
-    #model = GPTNeoForCausalLM.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
+    GPT2_MODEL = 'EleutherAI/gpt-neo-1.3B' 
+    model = GPTNeoForCausalLM.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
 
     #eda + gpt2     
 
@@ -699,9 +707,9 @@ def train_process():
     #test 
     #test_accuracy = test_evaluate(QModel_Classifier,cross_model_path, test_dataloader,hidden=hidden,num_labels=num_classes,feature_remove_max=True)
 
-    
-if __name__ == "__main__":
 
-        train_process()
-        os.rmdir("main_bot")
+
+if __name__ == "__main__":
+    train_process()
+    os.rmdir("main_bot")
     

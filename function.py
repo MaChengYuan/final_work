@@ -45,6 +45,7 @@ for i in range(len(main_index)):
     responses.append(x['responses'])
 
 
+
 def main_questions_function(call):
     mess = 'please choose interested item'
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True,resize_keyboard=True)
