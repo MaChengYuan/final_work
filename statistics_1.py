@@ -72,7 +72,8 @@ def show_statistics(message):
     plt.savefig("visitors.png")
     plt.show()
     
-    
+    # new image just in case
+    plt.figure() 
     
     # ranking for questions
     indexs = df.response.value_counts().index.tolist()

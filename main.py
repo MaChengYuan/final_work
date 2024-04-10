@@ -189,25 +189,24 @@ def model_process(model,tokenizer,sent,max_length):
     return indexs,probs
 
 def recognize_speech(message):
-    print('recognize_speech')
-    recognizer = sr.Recognizer()
-    info = bot.get_file(message.voice.file_id)
-    downloaded_file = bot.download_file(info.file_path)
-    src_filename = 'user_voice.ogg'
-    with open(src_filename, 'wb') as new_file:
-        new_file.write(downloaded_file)
-
-    dest_filename = 'output.wav'
-    process = subprocess.run(['ffmpeg', '-y', '-i', src_filename, dest_filename])
-    if process.returncode != 0:
-        mess = "Sorry, there was an error processing your request.\n"
-        mess += "Please write your questions with text."
-
-        bot.send_message(message.chat.id, mess)
-        #raise Exception("Something went wrong")
-        
-            
     try:
+        print('recognize_speech')
+        recognizer = sr.Recognizer()
+        info = bot.get_file(message.voice.file_id)
+        downloaded_file = bot.download_file(info.file_path)
+        src_filename = 'user_voice.ogg'
+        with open(src_filename, 'wb') as new_file:
+            new_file.write(downloaded_file)
+
+        dest_filename = 'output.wav'
+        process = subprocess.run(['ffmpeg', '-y', '-i', src_filename, dest_filename])
+        if process.returncode != 0:
+            mess = "Sorry, there was an error processing your request.\n"
+            mess += "Please write your questions with text."
+
+            bot.send_message(message.chat.id, mess)
+            #raise Exception("Something went wrong")
+            
         print('before read audio')
         user_audio_file = sr.AudioFile(dest_filename)
         print('after read audio')
@@ -225,9 +224,13 @@ def recognize_speech(message):
         mess = f'Is this what you just said ? : \n<b>{text}</b>' 
         msg = bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html')
         bot.register_next_step_handler(msg, check_audio,text)
-        
+    except sr.UnknownValueError:
+        mess = "Sorry, I couldn't understand that."
+        mess = 'please say it loudly or <b>clearly</b> write your questions \nIf multiple questions, please separate by <b>. or and</b>'
+        msg = bot.send_message(message.chat.id, mess,parse_mode='HTML')
+        bot.register_next_step_handler(msg, more_questions)
+    except:
 
-    except :
         mess = "Sorry, there was an error processing your request.\n"
         mess += "Please write your questions with text."
         #for debug
@@ -241,7 +244,16 @@ def check_audio(message,text):
     msg = message.text
     print('chekc_audio')
     if(msg == 'Yes'):
-        more_questions(message,text)
+        if(text == None):
+            mess = "Sorry, there was an error processing your request.\n"
+            mess += "Please write your questions with text."
+            #for debug
+            print('second error')
+            bot.send_message(message.chat.id, mess)
+            time.sleep(5)
+            restart(message)
+        else:
+            more_questions(message,text)
     elif(msg == 'Record again'):
         mess = 'please <b>clearly</b> write your questions \nIf multiple questions, please separate by <b>. or and</b>'
         msg = bot.send_message(message.chat.id, mess,parse_mode='HTML')
@@ -259,10 +271,11 @@ def more_questions(message,audio_text = None):
     
     try:
         print('more_questions')
-        if(audio_text != None):
+        if(audio_text != None ):
             sent = audio_text
         else:
-          sent = message.text
+            sent = message.text
+        
         sent = sent.lower()
         sent = function.multiple_question_detect(sent)
         
