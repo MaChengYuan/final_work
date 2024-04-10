@@ -5,10 +5,8 @@ import mongodb_read
 import random
 import time
 import re
-from datetime import datetime, timedelta
-import pandas as pd
+from datetime import datetime
 from telebot import types
-import tokens
 from nltk.tokenize import wordpunct_tokenize
 import nltk
 from nltk.corpus import stopwords
@@ -322,7 +320,7 @@ def model_decode(sents,max_length,message,advice_options = None):
 
         time.sleep(2)
         mess = ''
-        if(prob > 0.85):
+        if(prob > 0.75):
             found = mongodb_read.query(index,'original')
             main.record.message = sent
             main.record.predicted = index
@@ -536,7 +534,7 @@ def redirect_to_model(message,sents,advice_option):
 
     time.sleep(5)
     mess = ''
-    mess += 'if it is still does not answer your question , please follow instruction below'
+    mess += 'if it is still does not answer your question perfectly , please follow instruction below'
     mess += '\n'
     mess += '- - - - - - - - - - - - - - - - - - - - '
     mess += '\n'

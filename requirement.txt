@@ -6,3 +6,6 @@ matplotlib
 transformers
 nltk
 pytorch_lightning
+apscheduler
+SpeechRecognition
+scikit-learn

@@ -1,7 +1,7 @@
 main_QA.json
 requirements.txt
 #itmo_model.pt
-main_bot
+#main_bot
 transformers_cache
 recommendation.pth
 squares.png
@@ -10,3 +10,7 @@ visitors.png
 #password.txt
 .ipynb_checkpoints
 transformers_cache
+__pycache__
+user_voice.ogg
+pipeline_retrain.ipynb
+research_chat_bot.ipynb

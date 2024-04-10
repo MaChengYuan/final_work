@@ -1,6 +1,4 @@
 import pandas as pd
-import matplotlib 
-matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 import main 
 import mongodb_read 

@@ -13,8 +13,8 @@ myclient = pymongo.MongoClient(tokens.token2)
 
 if __name__ == "__main__":
     scheduler1 = BackgroundScheduler()
-    scheduler1.add_job(id='Scheduled task', func=train_process, trigger='interval', minutes=1)
-    scheduler1.add_job(id='Scheduled task1', func=train_recommend, trigger='interval', minutes=1)
+    scheduler1.add_job(id='Scheduled task', func=train_process, trigger='interval', weeks=8)
+    scheduler1.add_job(id='Scheduled task1', func=train_recommend, trigger='interval', weeks=8)
 
     scheduler1.start()
   

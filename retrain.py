@@ -52,8 +52,8 @@ def set_seed(seed_value):
     # torch.cuda.manual_seed_all(seed_value)
 
 
-scl_model_path = r"itmo_model.pt"
-cross_model_path = r"itmo_model.pt"
+scl_model_path = r"main_bot/itmo_model.pt"
+cross_model_path = r"main_bot/itmo_model.pt"
 stop_words = set(stopwords.words('english'))
 
 # a function for preprocessing text
@@ -606,7 +606,6 @@ def clean_punctuation(string):
 
 
 def train_process():
-    MAX_LEN = 64
     epoch =40 # number of epochs
 
     scl = True  # if True -> scl + cross entropy loss. else just cross entropy loss
@@ -672,7 +671,7 @@ def train_process():
     tokenizer = GPT2Tokenizer.from_pretrained(GPT2_MODEL,do_lower_case=True,cache_dir='transformers_cache')
     
     GPT2_MODEL = 'EleutherAI/gpt-neo-1.3B' 
-    model = GPTNeoForCausalLM.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
+    #model = GPTNeoForCausalLM.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
 
     #eda + gpt2     
 
@@ -686,7 +685,7 @@ def train_process():
     val_df = pd.concat(val_df, axis=0).sample(frac=1)
 
     
-    train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,file_name=file_name,seed = 1234,max_seq_length = MAX_LEN,sample_num=second_num_aug,num_train_epochs=5)
+    #train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,file_name=file_name,seed = 1234,max_seq_length = MAX_LEN,sample_num=second_num_aug,num_train_epochs=5)
 
     aug_path = f'{output_file}/posgpt2_eda.tsv'
 
@@ -711,5 +710,4 @@ def train_process():
 
 if __name__ == "__main__":
     train_process()
-    os.rmdir("main_bot")
     

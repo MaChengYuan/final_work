@@ -3,8 +3,6 @@ from telebot import types
 import telebot
 import os
 from torch import nn
-from tokens import token , password
-
 import mongodb_read 
 import statistics_1 
 import NLPmodel 
@@ -12,6 +10,10 @@ import function
 import pandas as pd
 import random
 import torch
+import speech_recognition as sr
+import subprocess
+
+from tokens import token , password
 
 
 class admin_mode_or_no():
@@ -24,10 +26,11 @@ class admin_mode_or_no():
 
 in_admin = admin_mode_or_no()
 
+# bot instrction menu
 bot = telebot.TeleBot(token, parse_mode='None')
-c1 = types.BotCommand(command='start', description='Start the Bot')
-bot.set_my_commands([c1])
-bot.set_chat_menu_button(bot.get_me().id, types.MenuButtonCommands('commands'))
+# c1 = types.BotCommand(command='start', description='Start the Bot')
+# bot.set_my_commands([c1])
+# bot.set_chat_menu_button(bot.get_me().id, types.MenuButtonCommands('commands'))
 
 
 @bot.message_handler(commands=['admin'])  
@@ -85,10 +88,14 @@ bot_name = 'ITMO BOT'
 
 msg_id = None
 
-if(file_exist):
-    model.load_state_dict(torch.load(PATH))
-    model.eval()
-else:
+try:
+    if(file_exist):
+        model.load_state_dict(torch.load(PATH))
+        model.eval()
+    else:
+        print('Maintanance')
+except:
+    file_exist = False
     print('Maintanance')
 
 def menu():
@@ -97,7 +104,9 @@ def menu():
         markup.add(types.InlineKeyboardButton('contact', callback_data='contact'))   
         markup.add(types.InlineKeyboardButton('main questions', callback_data='main questions'))  
         markup.add(types.InlineKeyboardButton('more questions', callback_data='more questions')) 
-        markup.add(types.InlineKeyboardButton('application', callback_data='application'))    
+        markup.add(types.InlineKeyboardButton('application', callback_data='application'))   
+        #markup.add(types.InlineKeyboardButton('audio_test', callback_data='audio_test'))    
+
         return markup
 
 
@@ -179,21 +188,98 @@ def model_process(model,tokenizer,sent,max_length):
 
     return indexs,probs
 
-def more_questions(message):
-    sent = message.text
-    sent = sent.lower()
-    
-    sent = function.multiple_question_detect(sent)
-    
-    sent = function.sep_by_and(sent)
+def recognize_speech(message):
+    print('recognize_speech')
+    recognizer = sr.Recognizer()
+    info = bot.get_file(message.voice.file_id)
+    downloaded_file = bot.download_file(info.file_path)
+    src_filename = 'user_voice.ogg'
+    with open(src_filename, 'wb') as new_file:
+        new_file.write(downloaded_file)
 
-    max_length = 64
-    print('item num :')
-    print(len(sent))
-    print()
-    print(sent)
+    dest_filename = 'output.wav'
+    process = subprocess.run(['ffmpeg', '-y', '-i', src_filename, dest_filename])
+    if process.returncode != 0:
+        mess = "Sorry, there was an error processing your request.\n"
+        mess += "Please write your questions with text."
+
+        bot.send_message(message.chat.id, mess)
+        #raise Exception("Something went wrong")
+        
+            
+    try:
+        print('before read audio')
+        user_audio_file = sr.AudioFile(dest_filename)
+        print('after read audio')
+        with user_audio_file as source:
+            user_audio = recognizer.record(source)
+        text = recognizer.recognize_google(user_audio, language='en-US')
+            
+        mess = f"You said: {text}"
+        print(mess)
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+        markup.add('Yes')
+        markup.add('Record again')
+        markup.add('Back to menu')
+
+        mess = f'Is this what you just said ? : \n<b>{text}</b>' 
+        msg = bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html')
+        bot.register_next_step_handler(msg, check_audio,text)
+        
+
+    except :
+        mess = "Sorry, there was an error processing your request.\n"
+        mess += "Please write your questions with text."
+        #for debug
+        print('second error')
+        bot.send_message(message.chat.id, mess)
+        time.sleep(5)
+        restart(message)
+
+
+def check_audio(message,text):
+    msg = message.text
+    print('chekc_audio')
+    if(msg == 'Yes'):
+        more_questions(message,text)
+    elif(msg == 'Record again'):
+        mess = 'please <b>clearly</b> write your questions \nIf multiple questions, please separate by <b>. or and</b>'
+        msg = bot.send_message(message.chat.id, mess,parse_mode='HTML')
+        bot.register_next_step_handler(msg, more_questions)
+    elif(msg == 'Back to menu'):
+        time.sleep(5)
+        restart(message)  
+    else:
+        mess = "Something went wrong , back to menu"
+        bot.send_message(message.chat.id, mess)
+        time.sleep(5)
+        restart(message)
+ 
+def more_questions(message,audio_text = None):
     
-    function.model_decode(sent,max_length,message)
+    try:
+        print('more_questions')
+        if(audio_text != None):
+            sent = audio_text
+        else:
+          sent = message.text
+        sent = sent.lower()
+        sent = function.multiple_question_detect(sent)
+        
+        sent = function.sep_by_and(sent)
+
+        max_length = 64
+        print('item num :')
+        print(len(sent))
+        print()
+        print(sent)
+        
+        function.model_decode(sent,max_length,message)
+
+    except:
+        print('voice')
+        recognize_speech(message)
+        
 
 def call_delete_menu(call):
     global msg_id
@@ -242,16 +328,16 @@ application -- to redirect to page to fill application
         function.main_questions_function(call)
     elif call.data == 'more questions': 
         call_delete_menu(call)
-        if(file_exist):          
-             
+        if(file_exist):              
             mess = 'please <b>clearly</b> write your questions \nIf multiple questions, please separate by <b>. or and</b>'
             msg = bot.send_message(call.message.chat.id, mess,parse_mode='HTML')
-            bot.register_next_step_handler(msg, more_questions)
+            bot.register_next_step_handler(msg,more_questions)
         else:
             mess = f'The system is under maintenance, sorry for inconvenience'
             bot.send_message(call.message.chat.id, mess)
             time.sleep(5)
             restart(call.message)
+
 
     elif call.data == 'application':
         call_delete_menu(call)
@@ -329,7 +415,7 @@ application -- to redirect to page to fill application
             call_delete_menu(call)
             statistics_1.show_statistics(call.message)
             time.sleep(10)
-            restart(call.message)
+            admin_start(call.message)
         except:
             mess = f'There is something wrong , please contact to fix the problem' 
             msg = bot.send_message(call.message.chat.id,mess)
@@ -338,6 +424,7 @@ application -- to redirect to page to fill application
     elif call.data == 'change_password':
         call_delete_menu(call)
         bot.register_next_step_handler(msg, change_password)
+
     else:
         call_delete_menu(call)
         mess = 'probably you did not choose option from buttons, so error occurred'
@@ -345,10 +432,8 @@ application -- to redirect to page to fill application
         time.sleep(10)
         restart(call.message)
 
-
 # admin section 
         
-
 def admin_confirm(message):
 
     if message.text == password :
