@@ -2,7 +2,6 @@
 
 import main
 import mongodb_read
-import random
 import time
 import re
 from datetime import datetime
@@ -34,8 +33,8 @@ def force_button_click(message):
     main.restart(message)
 
 corpse = ['requirement','scholarships','batchmates','research topics','internship']
-main_index = [0,1,2,3,4,5]
-mycol = mongodb_read.mongodb_atlas('training_data')
+main_index = [0,1,2,4,5]
+mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
 
 responses = []
 for i in range(len(main_index)):
@@ -49,7 +48,7 @@ def main_questions_function(call):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True,resize_keyboard=True)
     for i in range(len(corpse)):            
         markup.add(corpse[i])  
-    markup.add('None')  
+    markup.add('Back to menu')  
     try :
         id = call.message.chat.id
     except :
@@ -61,7 +60,7 @@ def main_questions_function(call):
 def main_questions(message):
     mess = None
 
-    if(message.text == 'None'):
+    if(message.text == 'Back to menu'):
         mess = 'redirecting to menu ...'
         main.bot.send_message(message.chat.id, mess,reply_markup=types.ReplyKeyboardRemove())
 
@@ -126,13 +125,13 @@ def sep_by_and(last_sent):
     return sent
 
 def SASRec_recommendations(message):
-    config = recommend.Args()
     print('here is SASRec_recommendations')
+    config = recommend.Args()
     print(f'history : {current_query_histroy.current_query_histroy}')
     print(len(list(set(current_query_histroy.current_query_histroy))))
     print(config.item_id_max - len(list(set(current_query_histroy.current_query_histroy))))
     if(config.item_id_max - len(list(set(current_query_histroy.current_query_histroy)))==0):
-        mess = 'You have reviewed all information'
+        mess = 'You have reviewed all information, Scroll up to review responses or Go to Write question sections'
         mess += '\n'
         mess += 'redirect to main page ... '
         
@@ -153,10 +152,13 @@ def SASRec_recommendations(message):
         questions = questions.tolist()
         
         print(f'options {questions}')
-        for index in range(len(questions)):            
-            found = mongodb_read.query(questions[index]-1,'original')
+        for index in range(len(questions)):     
+            mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+            markup.add(f'''{index}. {mycol.find_one({'tag':questions[index]-1})['patterns']}''')   
+            # found = mongodb_read.query(questions[index]-1,'original')
             
-            markup.add(f'''{index}. {random.choice(found)['patterns'][0]}''')
+            # markup.add(f'''{index}. {random.choice(found)['patterns'][0]}''')
+
         markup.add('I want to write')
         markup.add('None')
 
@@ -179,7 +181,7 @@ def recommendations(message,advice_options):
     print(advice_options)
 
     if(len(advice_options) == 0):
-        mess = 'You have reviewed all information'
+        mess = 'You have reviewed all information, Scroll up to review responses or Go to Write question sections'
         mess += '\n'
         mess += 'redirect to main page ... '
         
@@ -195,9 +197,11 @@ def recommendations(message,advice_options):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
     
     for index in range(len(questions)):            
-        found = mongodb_read.query(questions[index],'original')
+        mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+        markup.add(f'''{index}. {mycol.find_one({'tag':questions[index]})['patterns']  }''')  
+        # found = mongodb_read.query(questions[index],'original')
         
-        markup.add(f'''{index}. {random.choice(found)['patterns'][0]}''')
+        # markup.add(f'''{index}. {random.choice(found)['patterns'][0]}''')
     markup.add('I want to write')
     markup.add('None')
 
@@ -237,9 +241,10 @@ def recommendations_decode(message,questions_srs):
                 main.record.predicted = None
                 main.record.message = None
                 main.record.response = select_index
-                mongodb_read.record_dialogue(main.record,'new_response')
-                found = mongodb_read.query(questions[select_index]-1,'original')
-                mess = random.choice(found)['responses'][0]
+                mongodb_read.record_dialogue('global',main.record,'new_response')
+
+                mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+                mess = mycol.find_one({'tag':questions[select_index]-1})['responses']
                 main.bot.send_message(message.chat.id,mess)
                 
                 time.sleep(2)  
@@ -254,14 +259,16 @@ def recommendations_decode(message,questions_srs):
                 main.record.predicted = None
                 main.record.message = None
                 main.record.response = select_index
-                mongodb_read.record_dialogue(main.record,'new_response')
+                mongodb_read.record_dialogue('global',main.record,'new_response')
                 
                 print(questions[select_index])
                 
                 mess = ''
-                found = mongodb_read.query(questions[select_index],'original')
-                
-                mess += random.choice(found)['responses'][0]
+                mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+                mess += mycol.find_one({'tag':questions[select_index]})['responses']
+                # found = mongodb_read.query(questions[select_index],'original')                
+                # mess += random.choice(found)['responses'][0]
+
                 main.bot.send_message(message.chat.id,mess)
                 questions.remove(questions[select_index])
                 
@@ -270,6 +277,7 @@ def recommendations_decode(message,questions_srs):
                 main.bot.send_message(message.chat.id,mess)
                 recommendations(message,questions)
     except:
+        print('recommendations_decode')
         main.message_delete_menu(message)
         mess = 'probably you did not choose option from buttons, so error occurred'
         mess = '\n'
@@ -296,8 +304,8 @@ def model_decode(sents,max_length,message,advice_options = None):
             main.bot.send_message(message.chat.id,mess)
             recommendations(message,advice_options)            
     else:
+
         sent = sents[0]
-        
         
         mess = 'Processing ... (it may takes 5 - 10 seconds)'
         main.msg_id = main.bot.send_message(message.chat.id, mess).message_id
@@ -321,13 +329,16 @@ def model_decode(sents,max_length,message,advice_options = None):
         time.sleep(2)
         mess = ''
         if(prob > 0.75):
-            found = mongodb_read.query(index,'original')
+            mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+            
+            #found = mongodb_read.query(index,'original')
             main.record.message = sent
             main.record.predicted = index
 
             mess = f'To question : <b>{sent}</b>'
             mess = '\n'
-            mess = random.choice(found)['responses'][0]
+            mess = mycol.find_one({'tag':index})['responses']
+            #mess = random.choice(found)['responses'][0]
             print(mess)
             print()
 
@@ -351,31 +362,31 @@ def model_decode(sents,max_length,message,advice_options = None):
             mess += f"Sorry I am unable to Process Your Request : {sent}"
             main.bot.send_message(message.chat.id, mess)
 
-            markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
-
             mess = f'belows are possible answers for your questions'
             mess += '\n'
             mess += '- - - - - - - - - - - - - - - - - - - - '
             mess += '\n'
             mess += '\n'
 
+            markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
             options = []
             for index in range(len(indexs))[:2]:            
                 markup.add(str(index))
                 options.append(index)
-                found = mongodb_read.query(indexs[index],'original')
-
-                mess += f'NUMBER {index}.'
+                mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+                #found = mongodb_read.query(indexs[index],'original')
+                mess += f'NO {index}.'
                 mess += '\n'
-                mess += random.choice(found)['responses'][0]
+                mess += mycol.find_one({'tag':indexs[index]})['responses']
+                #mess += random.choice(found)['responses'][0]
                 mess += '\n'
                 mess += '\n'
-
+            markup.add('More') 
+            markup.add('None') 
             sents_other_answer_options.append(options)
 
             main.bot.send_message(message.chat.id,mess)
             mess = 'For better performance of system, please click the most correspondent response to your question, thank you for the feedback'    
-            markup.add('None') 
             msg = main.bot.send_message(message.chat.id,mess, reply_markup=markup)
             main.bot.register_next_step_handler(msg, record_correct_response,sents_other_answer_options)
     
@@ -400,11 +411,8 @@ def record_correct_response(message,sents_other_answer_options):
     other_answer = sents_other_answer_options[1]
     sents = sents_other_answer_options[0]
     options = sents_other_answer_options[2]
-
-    ans = message.text
     sent = sents[0]
-    sents.remove(sent)
-
+    ans = message.text
 
     try:
         detect_tokens = detect_meaningless_sentence(sent)
@@ -418,8 +426,41 @@ def record_correct_response(message,sents_other_answer_options):
             if(ans == 'None'):
                 
                 main.record.response = None
-                mongodb_read.record_dialogue(main.record,'unknown_response')
-                
+                mongodb_read.record_dialogue('global',main.record,'unknown_response')
+                #delete current questions 
+                sents.remove(sent)
+                redirect_to_model(message,sents,other_answer)
+            elif(ans == 'More'):
+                first_two = other_answer[:2]
+                other_answer = other_answer[2:]
+                other_answer.extend(first_two)
+                markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+                options = []
+                mess = ''
+                for index in range(len(other_answer))[:2]:            
+                    markup.add(str(index))
+                    options.append(index)
+                    mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+                    #found = mongodb_read.query(indexs[index],'original')
+                    mess += f'NO {index}.'
+                    mess += '\n'
+                    mess += mycol.find_one({'tag':other_answer[index]})['responses']
+                    #mess += random.choice(found)['responses'][0]
+                    mess += '\n'
+                    mess += '\n'
+                markup.add('More') 
+                markup.add('None') 
+                sents_other_answer_options[2] = options
+                sents_other_answer_options[1] = other_answer
+                print('after change')
+                print(other_answer)
+                print(options)
+
+                main.bot.send_message(message.chat.id,mess)
+                mess = 'For better performance of system, please click the most correspondent response to your question, thank you for the feedback'    
+                msg = main.bot.send_message(message.chat.id,mess, reply_markup=markup)
+                main.bot.register_next_step_handler(msg, record_correct_response,sents_other_answer_options)
+
             elif(int(ans) in options):
                 #pluse because train sasrec model with index + 1
                 current_query_histroy.current_query_histroy.append(other_answer[int(ans)]+1)
@@ -430,12 +471,14 @@ def record_correct_response(message,sents_other_answer_options):
                 
                 #write into database
                 
-                mongodb_read.record_dialogue(main.record,'new_response')
-                #----retrain detect
+                mongodb_read.record_dialogue('global',main.record,'new_response')
 
+                print(other_answer[int(ans)])
+                print(ans)
                 other_answer.remove(other_answer[int(ans)]) 
-            
-            redirect_to_model(message,sents,other_answer)
+                #delete current questions 
+                sents.remove(sent)
+                redirect_to_model(message,sents,other_answer)
     except:
         
         mess = 'probably you did not choose option from buttons, so error occurred'
@@ -480,7 +523,7 @@ def satisfaction(message,sents_other_answer):
             #mongodb_read.record_dialogue(main.record,'trash')
             redirect_to_model(message,sents,other_answer)
         else:
-            mongodb_read.record_dialogue(main.record,'new_response')
+            mongodb_read.record_dialogue('global',main.record,'new_response')
             redirect_to_model(message,sents,other_answer)
     
 
@@ -497,11 +540,12 @@ def satisfaction(message,sents_other_answer):
         for index in range(len(other_answer))[:2]:            
             options.append(index)
             markup.add(str(index))
-            
-            found = mongodb_read.query(other_answer[index],'original')
+            mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
+            #found = mongodb_read.query(other_answer[index],'original')
             mess += f'<b>No. {index}.</b>'
             mess += '\n'
-            mess += random.choice(found)['responses'][0]
+            mess += mycol.find_one({'tag':other_answer[index]})['responses']
+            #mess += random.choice(found)['responses'][0]
             mess += '\n'
             mess += '\n'
                 
@@ -511,6 +555,7 @@ def satisfaction(message,sents_other_answer):
         
         mess += '\n'
         mess = 'For better performance of system, please click the most correspondent response to your question, thank you for the feedback'    
+        markup.add('More') 
         markup.add('None') 
         msg = main.bot.send_message(message.chat.id,mess, reply_markup=markup)
         sents_other_answer_options=[]

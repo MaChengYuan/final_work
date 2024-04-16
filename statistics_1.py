@@ -10,11 +10,11 @@ def show_statistics(message):
     end = datetime.now()
     start = end - timedelta(days = 365)
 
-    mycol = mongodb_read.mongodb_atlas('new_response')
+    mycol = mongodb_read.mongodb_atlas('global','new_response')
     x = mycol.find({"time":{"$gte":start}})      
     df = pd.DataFrame(list(x))
     
-    mycol = mongodb_read.mongodb_atlas('new_response')
+    mycol = mongodb_read.mongodb_atlas('global','new_response')
     x = mycol.find({"time":{"$gte":start}})      
     df_new = pd.DataFrame(list(x))
     df_new  = df_new.dropna(subset = ['message'])
@@ -25,7 +25,7 @@ def show_statistics(message):
     # combine known and unknown datasets
     acc_df = df[df.predicted == df.response].reset_index(drop=True)
     
-    mycol = mongodb_read.mongodb_atlas('unknown_response')
+    mycol = mongodb_read.mongodb_atlas('global','unknown_response')
     x = mycol.find({"time":{"$gte":start}})    
     un_df = pd.DataFrame(list(x))
     

@@ -9,9 +9,9 @@ eastern_tz = pytz.timezone('Europe/Moscow')
 
 myclient = init.myclient
 
-def mongodb_atlas(table_name):
+def mongodb_atlas(db,table_name):
     
-    mydb = myclient["itmo_data"]
+    mydb = myclient[db]
 
     mycol = mydb[table_name]
 
@@ -19,9 +19,10 @@ def mongodb_atlas(table_name):
 
 
 
-def record_dialogue(record,name):
+def record_dialogue(db,record,name):
+    print('begin of record')
 
-    mydb = myclient["itmo_data"]
+    mydb = myclient[db]
     mycol = mydb[name]
 
     #mycol = mydb["customers"]
@@ -30,11 +31,12 @@ def record_dialogue(record,name):
 
     mydict = { "name": record.name , "id": record.id, "message": record.message, "predicted":record.predicted, "response":record.response ,"time": now }   
     
-    x = mycol.insert_one(mydict)
+    mycol.insert_one(mydict)
+    print('end of record')
 
-def query(keylabel,collection):
+def query(db,keylabel,collection):
     
-    mydb = myclient["itmo_data"]
+    mydb = myclient[db]
     
     mycol = mydb[collection]
     
@@ -48,3 +50,9 @@ def query(keylabel,collection):
         
     return found
     
+
+def show_program_name(db = 'itmo_data'):
+    mydb = myclient[db]
+    list_db = mydb.list_collection_names()
+    return list_db
+   

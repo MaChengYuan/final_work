@@ -41,14 +41,15 @@ class Args():
 
         self.max_epochs= 100
         self.patience= 10
-        self.sampled_metrics= False
+        self.sampled_metrics= False 
         self.top_k_metrics=10
         self.add_head = False
 
-        mycol = retrain.mongodb_atlas('training_data')
-        x = mycol.find() 
-        df = pd.DataFrame(list(x))
-        self.item_id_max = len(df.tag.value_counts())
+        mycol = retrain.mongodb_atlas('itmo_data','big data and machine learning')
+        #mycol = retrain.mongodb_atlas('train_data')
+
+        print(list(mycol.find().sort('tag'))[-1]['tag']+1)
+        self.item_id_max = list(mycol.find().sort('tag'))[-1]['tag']+1
         self.max_length = self.item_id_max 
 
 def train(seqrec_module, train_loader,config,eval_loader = None):
@@ -336,7 +337,7 @@ def sequence_df(df,DA = False):
 def train_recommend():
     config = Args()
     
-    mycol = retrain.mongodb_atlas('new_response')
+    mycol = retrain.mongodb_atlas('global','new_response')
     x = mycol.find() 
     df = pd.DataFrame(list(x))
 

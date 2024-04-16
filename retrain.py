@@ -35,9 +35,9 @@ import pymongo
 token = tokens.token2
 myclient = pymongo.MongoClient(token)
 
-def mongodb_atlas(table_name):
+def mongodb_atlas(db,table_name):
     
-    mydb = myclient["itmo_data"]
+    mydb = myclient[db]
 
     mycol = mydb[table_name]
 
@@ -559,7 +559,7 @@ def clean_db(df):
     df = df.dropna(subset=['time']).reset_index(drop=True)
     for i in time_na._id:
         try:
-            mycol = mongodb_atlas('new_response')
+            mycol = mongodb_atlas('global','new_response')
             mycol.delete_one({'_id':i})
         except:
             print('something wrong happen')
@@ -571,7 +571,7 @@ def clean_db(df):
     
     for i in label_non_str._id:
         try:
-            mycol = mongodb_atlas('new_response')
+            mycol = mongodb_atlas('global','new_response')
             mycol.delete_one({'_id':i})
         except:
             print('something wrong happen')
@@ -607,7 +607,6 @@ def clean_punctuation(string):
 
 def train_process():
     epoch =40 # number of epochs
-
     scl = True  # if True -> scl + cross entropy loss. else just cross entropy loss
     temprature = 0.3  # temprature for contrastive loss
     lam = 0.9  # lambda for loss
@@ -622,7 +621,7 @@ def train_process():
     second_num_aug = 4
 
     # original datasets plus new_responses 
-    mycol = mongodb_atlas('new_response')
+    mycol = mongodb_atlas('global','new_response')
     x = mycol.find()    
     df = pd.DataFrame(list(x))
     # clean and remove unneccesary training datas
@@ -630,7 +629,7 @@ def train_process():
     df = df[['response','message']]
     new = df.rename(columns={'response':'label','message':'sentence'})
 
-    mycol = mongodb_atlas('training_data')
+    mycol = mongodb_atlas('itmo_data','big data and machine learning')
     x = mycol.find()    
     df = pd.DataFrame(list(x))
     df = df.rename(columns={'tag':'label','patterns':'sentence'})
@@ -657,16 +656,16 @@ def train_process():
     output_dir = os.path.join(output_file, file_name)
     gen_eda(df,output_dir , alpha=alpha, num_aug=num_aug , reverse = False)
     
-    from transformers import GPTNeoForCausalLM
+    #from transformers import GPTNeoForCausalLM
     from transformers import GPT2Tokenizer
-    #from transformers import GPT2LMHeadModel
+    from transformers import GPT2LMHeadModel
     
     #gpt2
     print('GPT phase')
     
     
     GPT2_MODEL = 'gpt2'
-    #model = GPT2LMHeadModel.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
+    model = GPT2LMHeadModel.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
     
     tokenizer = GPT2Tokenizer.from_pretrained(GPT2_MODEL,do_lower_case=True,cache_dir='transformers_cache')
     
@@ -682,10 +681,8 @@ def train_process():
     sample = 3    
     val_df = [train_df.loc[train_df.label == i].sample(n=sample, random_state=seed) for i in
                     train_df.label.unique()]
-    val_df = pd.concat(val_df, axis=0).sample(frac=1)
-
-    
-    #train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,file_name=file_name,seed = 1234,max_seq_length = MAX_LEN,sample_num=second_num_aug,num_train_epochs=5)
+    val_df = pd.concat(val_df, axis=0).sample(frac=1)   
+    train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,file_name=file_name,seed = 1234,max_seq_length = MAX_LEN,sample_num=second_num_aug,num_train_epochs=5)
 
     aug_path = f'{output_file}/posgpt2_eda.tsv'
 

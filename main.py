@@ -8,10 +8,10 @@ import statistics_1
 import NLPmodel 
 import function 
 import pandas as pd
-import random
 import torch
 import speech_recognition as sr
 import subprocess
+import json
 
 from tokens import token , password
 
@@ -100,11 +100,12 @@ except:
 
 def menu():
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton('help', callback_data='help'))   
-        markup.add(types.InlineKeyboardButton('contact', callback_data='contact'))   
-        markup.add(types.InlineKeyboardButton('main questions', callback_data='main questions'))  
-        markup.add(types.InlineKeyboardButton('more questions', callback_data='more questions')) 
-        markup.add(types.InlineKeyboardButton('application', callback_data='application'))   
+        markup.add(types.InlineKeyboardButton('Help', callback_data='help'))   
+        markup.add(types.InlineKeyboardButton('Contact', callback_data='contact'))   
+        markup.add(types.InlineKeyboardButton('Main questions', callback_data='main questions'))  
+        markup.add(types.InlineKeyboardButton('Write questions', callback_data='more questions')) 
+        markup.add(types.InlineKeyboardButton('Application', callback_data='application')) 
+
         #markup.add(types.InlineKeyboardButton('audio_test', callback_data='audio_test'))    
 
         return markup
@@ -121,7 +122,6 @@ def start(message):
 
 @bot.message_handler(commands=['start']) 
 def start(message):
-
     try:
         # admin model false
         in_admin.in_admin = False
@@ -129,7 +129,7 @@ def start(message):
         mess += f'\n'
 
         #detect if there is response from staff    
-        mycol = mongodb_read.mongodb_atlas('response_to_user')
+        mycol = mongodb_read.mongodb_atlas('global','response_to_user')
         x = mycol.find({'id':message.chat.id}) 
         df = pd.DataFrame(list(x))
         if(len(df)==0):
@@ -144,8 +144,10 @@ def start(message):
                 mess += f'To your question : {list_of_ques[i]}'
                 mess += f'\n'
                 mess += f'\n'
-                found = mongodb_read.query(list_of_res[i],'original')
-                mess += random.choice(found)['responses'][0]
+                mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
+                mess += mycol.find_one({'tag':list_of_res[i]})['responses']
+                # found = mongodb_read.query(list_of_res[i],'original')
+                # mess += random.choice(found)['responses'][0]
             
         #record name and id 
         record.id = message.chat.id
@@ -242,7 +244,7 @@ def recognize_speech(message):
 
 def check_audio(message,text):
     msg = message.text
-    print('chekc_audio')
+    print('check_audio')
     if(msg == 'Yes'):
         if(text == None):
             mess = "Sorry, there was an error processing your request.\n"
@@ -267,9 +269,10 @@ def check_audio(message,text):
         time.sleep(5)
         restart(message)
  
-def more_questions(message,audio_text = None):
-    
+def more_questions(message,program_audio_text = None):
     try:
+        program = program_audio_text[0]
+        audio_text = program_audio_text[1]
         print('more_questions')
         if(audio_text != None ):
             sent = audio_text
@@ -278,7 +281,6 @@ def more_questions(message,audio_text = None):
         
         sent = sent.lower()
         sent = function.multiple_question_detect(sent)
-        
         sent = function.sep_by_and(sent)
 
         max_length = 64
@@ -286,7 +288,8 @@ def more_questions(message,audio_text = None):
         print(len(sent))
         print()
         print(sent)
-        
+        sent[0] = f'{program}:' + sent[0]
+
         function.model_decode(sent,max_length,message)
 
     except:
@@ -313,23 +316,26 @@ def message_reply(call):
         bot.send_message(call.message.chat.id,mess)
 
         # to delete last message
+        # try <a href='aakarabintseva@itmo.ru'>Program coordinator</a>
         mess = """
+1. aakarabintseva@itmo.ru :  Program coordinator
 
-Program coordinator --  aakarabintseva@itmo.ru
-International office -- international@itmo.ru
-Student office -- aakiseleva@itmo.ru
-Migration office -- aakhalilova@itmo.ru 
+2. international@itmo.ru  :  International office 
+
+3. int.students@itmo.ru   :  Student office 
+
+4. aakhalilova@itmo.ru    :  Migration office
 """
-        bot.send_message(call.message.chat.id,mess)
+        bot.send_message(call.message.chat.id,mess, parse_mode='html')
         time.sleep(5)
         restart(call.message)
     elif call.data == 'help': 
         call_delete_menu(call)
         mess = """
-contact --  to find Email address of specific staff in ITMO
-main questions -- to answer most frequent questions from candidates
-more questions -- to answer other questions
-application -- to redirect to page to fill application
+Contact --  to find Email address of specific staff in ITMO
+Main questions -- to answer most frequent questions from candidates
+Write questions -- to write your own question with text
+Application -- to redirect to page to fill application
 """
         bot.send_message(call.message.chat.id,mess)
         # to delete last message
@@ -341,16 +347,24 @@ application -- to redirect to page to fill application
         function.main_questions_function(call)
     elif call.data == 'more questions': 
         call_delete_menu(call)
-        if(file_exist):              
-            mess = 'please <b>clearly</b> write your questions \nIf multiple questions, please separate by <b>. or and</b>'
-            msg = bot.send_message(call.message.chat.id, mess,parse_mode='HTML')
-            bot.register_next_step_handler(msg,more_questions)
-        else:
-            mess = f'The system is under maintenance, sorry for inconvenience'
-            bot.send_message(call.message.chat.id, mess)
-            time.sleep(5)
-            restart(call.message)
+        db_list = mongodb_read.show_program_name()
 
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+
+        for name in db_list:
+            markup.add(f'{name}') 
+        mess = 'Please choose target program'
+        msg = bot.send_message(call.message.chat.id, mess, reply_markup=markup, parse_mode='html')
+        bot.register_next_step_handler(msg,choose_program)
+        # if(file_exist):              
+        #     mess = 'please choose desired department'
+        #     msg = bot.send_message(call.message.chat.id, mess,parse_mode='HTML')
+        #     bot.register_next_step_handler(msg,more_questions)
+        # else:
+        #     mess = f'The system is under maintenance, sorry for inconvenience'
+        #     bot.send_message(call.message.chat.id, mess)
+        #     time.sleep(5)
+        #     restart(call.message)
 
     elif call.data == 'application':
         call_delete_menu(call)
@@ -366,7 +380,7 @@ application -- to redirect to page to fill application
     # admin mode
     elif call.data == 'correct_unknown_questions':
         call_delete_menu(call)
-        mycol = mongodb_read.mongodb_atlas('unknown_response') 
+        mycol = mongodb_read.mongodb_atlas('global','unknown_response') 
         unknows = []
 
         x = mycol.find() 
@@ -401,10 +415,14 @@ application -- to redirect to page to fill application
                 markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 
                 for i in range(len(indexs)):
-                    found = mongodb_read.query(indexs[i],'original')
-
-                    tag = str(found[0]['tag'])
-                    response = found[0]['responses'][0]
+                    mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning') 
+                    found = mycol.find_one({'tag':indexs[i]}) 
+                    tag = str(found['tag'])
+                    response = found['responses']
+                    #found = mongodb_read.query(indexs[i],'original')
+                    
+                    # tag = str(found[0]['tag'])
+                    # response = found[0]['responses'][0]
                     markup.add(f'{tag} {response}') 
 
 
@@ -413,7 +431,7 @@ application -- to redirect to page to fill application
                 markup.add('Back to menu')
         
                 mess = f'Please choose most correspondent answer to question : \n<b>{msg}</b>' 
-                mess = f'\nThey are order by most possible responses' 
+                mess += f'\n\nThey are order from most possible responses to least ones' 
 
                 msg = bot.send_message(call.message.chat.id, mess, reply_markup=markup, parse_mode='html')
                 #send rest of unknown to next func
@@ -423,6 +441,21 @@ application -- to redirect to page to fill application
             else:
                 mycol.delete_one({"_id":one_unknown['_id'].tolist()[0]}) 
                 update_unknown_datasets(call.message)
+    elif call.data == 'Update_responses':
+        mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
+        x = mycol.find().sort('tag')
+        train_data = pd.DataFrame(list(x))[['tag','responses']].drop_duplicates()
+        tags = train_data.tag.tolist()
+        responses = train_data.responses.tolist()
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        for i in range(len(tags)):
+            markup.add(f'{tags[i]} {responses[i]}') 
+
+        mess = f'Please choose text which you want to correct' 
+        msg = bot.send_message(call.message.chat.id, mess, reply_markup=markup, parse_mode='html')
+        bot.register_next_step_handler(msg, update_responses)
+
+
     elif call.data == 'statistics_plot':
         try:
             call_delete_menu(call)
@@ -438,6 +471,13 @@ application -- to redirect to page to fill application
         call_delete_menu(call)
         bot.register_next_step_handler(msg, change_password)
 
+    elif call.data == 'add new program':
+        mess = f'Please send files'
+        mess += f'\nFile must be json file and\nTitle should be "patterns" with questions and "responses" with responses' 
+
+        msg = bot.send_message(call.message.chat.id, mess)
+        bot.register_next_step_handler(msg, insert_new_program_info)
+
     else:
         call_delete_menu(call)
         mess = 'probably you did not choose option from buttons, so error occurred'
@@ -445,6 +485,71 @@ application -- to redirect to page to fill application
         time.sleep(10)
         restart(call.message)
 
+def choose_program(message):
+    db_list = mongodb_read.show_program_name()
+    program = message.text
+    if(program in db_list):
+        mess = 'please <b>clearly</b> write your questions \nIf multiple questions, please separate by <b>. or and</b>'
+        msg = bot.send_message(message.chat.id, mess,parse_mode='HTML')
+
+        bot.register_next_step_handler(msg,more_questions,[program,None])
+    else:
+        call_delete_menu(message)
+        mess = 'probably you did not choose option from buttons, so error occurred'
+        bot.send_message(message.chat.id,mess)
+        time.sleep(10)
+        restart(message)
+
+def insert_new_program_info(message):
+    try:
+        file_name = message.document.file_name
+        file_info = bot.get_file(message.document.file_id)
+        file_data = bot.download_file(file_info.file_path)
+        print(type(file_data))
+            
+        if(file_name in mongodb_read.show_program_name('itmo_data')):
+            mess = 'File name duplicated , please change it and upload it again'
+            mess += '\nBack to menu...'
+            bot.send_message(message.chat.id,mess)
+            time.sleep(3)
+            admin_start(message)
+        else:
+            mycol = mongodb_read.mongodb_atlas('itmo_data',file_name.split('.')[0])
+            # if exists 
+            mycol.drop()
+
+            with open(file_name, 'wb') as new_file:
+                new_file.write(file_data)
+
+            with open(file_name, 'rb') as new_file:
+                file_content = json.load(new_file)
+            print(type(file_content))
+            index = -1
+            for i in file_content:
+                index += 1
+                for j in i['patterns']:
+                    for k in i['responses']:
+                        mycol.insert_one({
+                            'tag':index,
+                            'patterns':j,
+                            'responses':k
+                        })  
+            #mycol.insert_many(file_content)  
+            mess = f'new df is updated' 
+            os.remove(file_name)
+            bot.send_message(message.chat.id, mess)
+            time.sleep(10)
+            restart(message)
+    except:
+        mess = """Probably json file has wrong format\nMake sure format follow like below\n
+        [
+        {},
+        {}
+        ]"""
+        os.remove(file_name)
+        bot.send_message(message.chat.id, mess)
+        time.sleep(10)
+        restart(message)
 # admin section 
         
 def admin_confirm(message):
@@ -465,9 +570,11 @@ def admin_confirm(message):
 def admin_menu():
     
     markup = types.InlineKeyboardMarkup() 
-    markup.add(types.InlineKeyboardButton('correct_unknown_questions', callback_data='correct_unknown_questions')) 
-    markup.add(types.InlineKeyboardButton('change password', callback_data='change_password'))    
-    markup.add(types.InlineKeyboardButton('statistics', callback_data='statistics_plot'))    
+    markup.add(types.InlineKeyboardButton('Correct unknown questions', callback_data='correct_unknown_questions')) 
+    markup.add(types.InlineKeyboardButton('Update responses', callback_data='Update_responses')) 
+    markup.add(types.InlineKeyboardButton('Change password', callback_data='change_password'))    
+    markup.add(types.InlineKeyboardButton('Statistics', callback_data='statistics_plot'))  
+    markup.add(types.InlineKeyboardButton('add new program', callback_data='test'))     
     return markup
 
 
@@ -481,7 +588,7 @@ def admin_start(message):
 
 def update_unknown_datasets(message):
 
-    mycol = mongodb_read.mongodb_atlas('unknown_response') 
+    mycol = mongodb_read.mongodb_atlas('global','unknown_response') 
     unknows = mycol.find()
     unknows = pd.DataFrame(list(unknows))
     unknows = unknows.message.tolist()
@@ -506,9 +613,13 @@ def update_unknown_datasets(message):
             markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
 
             for i in range(len(indexs)):
-                found = mongodb_read.query(indexs[i],'original')
-                tag = str(found[0]['tag'])
-                response = found[0]['responses'][0]
+                mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning') 
+                found = mycol.find_one({'tag':indexs[i]}) 
+                tag = str(found['tag'])
+                response = found['responses']
+                # found = mongodb_read.query(indexs[i],'original')
+                # tag = str(found[0]['tag'])
+                # response = found[0]['responses'][0]
                 markup.add(f'{tag} {response}') 
 
             markup.add('New Topic')
@@ -516,7 +627,7 @@ def update_unknown_datasets(message):
             markup.add('Back to menu')
 
             mess = f'Please choose most correspondent topic to question : \n<b>{msg}</b>' 
-            mess = f'\nThey are order by most possible responses' 
+            mess += f'\nThey are order by most possible responses' 
             msg = bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html')
 
             #send rest of unknown to next func
@@ -526,11 +637,12 @@ def update_unknown_datasets(message):
             update_unknown_datasets(message)
 def insert_delete_unknow(message,one_unknown):
     msg = message.text
-    tag = int(msg.split(' ')[0])
-    print(one_unknown)
+    
     try:
+        tag = int(msg.split(' ')[0])
+        print(one_unknown)
         if(msg == 'New Topic'):
-            mess = 'please think a response for question'
+            mess = 'please think a response for question'   
             msg = bot.send_message(message.chat.id,mess)
             bot.register_next_step_handler(msg, insert_new_topic,one_unknown)
         elif(msg == 'Back to menu'):
@@ -539,10 +651,10 @@ def insert_delete_unknow(message,one_unknown):
             time.sleep(3)
             admin_start(message)
         elif(msg == 'Go to Trash'):
-            mycol = mongodb_read.mongodb_atlas('unknown_response')
+            mycol = mongodb_read.mongodb_atlas('global','unknown_response')
             mycol.delete_one({"_id":one_unknown['_id']}) 
 
-            mycol = mongodb_read.mongodb_atlas('trash')
+            mycol = mongodb_read.mongodb_atlas('global','trash')
             one_unknown.pop('_id')
             mycol.insert_one(one_unknown) 
             time.sleep(3)
@@ -551,23 +663,23 @@ def insert_delete_unknow(message,one_unknown):
             print('before deleted finished in unknown')
             print(one_unknown['_id'])
             print(tag)
-            mycol = mongodb_read.mongodb_atlas('unknown_response')
+            mycol = mongodb_read.mongodb_atlas('global','unknown_response')
             mycol.delete_one({"_id":one_unknown['_id']}) 
             print('deleted finished in unknown')
 
-            mycol = mongodb_read.mongodb_atlas('training_data')
+            mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
             found = mycol.find_one({'tag':tag})
             tag = found['tag']
             print(tag)
             one_unknown['response'] = tag
             print('after tag')
             one_unknown.pop('_id')
-            
+    
 
-            mycol = mongodb_read.mongodb_atlas('new_response')
+            mycol = mongodb_read.mongodb_atlas('global','new_response')
             mycol.insert_one(one_unknown) 
             print('insert finished in new')
-            mycol = mongodb_read.mongodb_atlas('response_to_user')
+            mycol = mongodb_read.mongodb_atlas('global','response_to_user')
             mycol.insert_one(one_unknown) 
             print('insert finished in response to user')
 
@@ -581,14 +693,109 @@ def insert_delete_unknow(message,one_unknown):
         bot.send_message(message.chat.id,mess)
         time.sleep(3)
         admin_start(message)
+def update_responses(message):
+    try:
+        tag = int(message.text.split(' ')[0])
+        print(tag)
+        mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
+        found = mycol.find_one({'tag':tag})
+        former_text = found['responses']
+        mess = 'original text:\n'
+        mess += '{}\n\n'.format(former_text)
+        mess += 'template for question: \n'
+        mess += '{}'.format(found['patterns'])
+        bot.send_message(message.chat.id,mess)
+
+        mess = f'Please write new response'
+        text = bot.send_message(message.chat.id,mess)
+        tag_former_text = []
+        tag_former_text.append(tag)
+        tag_former_text.append(former_text)
+        bot.register_next_step_handler(text, confirm_options,tag_former_text)
+    except:
+        mess = 'probably you did not choose option from buttons, so error occurred'
+        bot.send_message(message.chat.id,mess)
+        time.sleep(3)
+        admin_start(message)
+
+def confirm_options(message,tag_former_text):
+    try:
+        text = message.text
+        tag = tag_former_text[0]
+        former_text = tag_former_text[1]
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        markup.add('Yes') 
+        markup.add('No') 
+        markup.add('Another response') 
+        mess = f'Agree to change ?\n' 
+        mess += 'From \n{}\n\n'.format(former_text) 
+        mess += 'To :\n{}\n'.format(text) 
+
+        msg = bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html')
+        tag_text = []
+        tag_text.append(tag)
+        tag_text.append(text)
+        tag_text = []
+        tag_text.append(tag)
+        tag_text.append(text)
+        bot.register_next_step_handler(msg, confirm_update,tag_text)
+    except:
+        mess = 'probably you did not choose option from buttons, so error occurred'
+        bot.send_message(message.chat.id,mess)
+        time.sleep(3)
+        admin_start(message)
+    
+def confirm_update(message,tag_text):
+    try:
+        ans = message.text
+        tag = tag_text[0]
+        text = tag_text[1]
+        mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
+
+        if(ans == 'Yes'):
+            newvalues = { "$set": { "responses": text } }
+            mycol.update_many({'tag':tag},newvalues)
+            mess = f'successfully updated , back to menu'
+            bot.send_message(message.chat.id,mess)
+            time.sleep(3)
+            admin_start(message)
+        elif(ans == 'No'):
+            mess = f'Please write again'
+            bot.send_message(message.chat.id,mess)
+            update_responses(tag)
+        elif(ans == 'Another response'):
+            mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
+            x = mycol.find().sort('tag')
+            train_data = pd.DataFrame(list(x))[['tag','responses']].drop_duplicates()
+            tags = train_data.tag.tolist()
+            responses = train_data.responses.tolist()
+            markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+            for i in range(len(tags)):
+                markup.add(f'{tags[i]} {responses[i]}') 
+
+            mess = f'Please choose text which you want to correct' 
+            msg = bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html')
+            tag = msg.split(' ')[0]
+            bot.register_next_step_handler(tag, update_responses)
+        else:
+            mess = 'Probably you did not choose option from buttons, so error occurred'
+            bot.send_message(message.chat.id,mess)
+            time.sleep(3)
+            admin_start(message)
+    except:
+        mess = 'Error occurred, sorry for inconvenience\nRedirecting to menu'
+        bot.send_message(message.chat.id,mess)
+        time.sleep(3)
+        admin_start(message)
+
 
 def insert_new_topic(message,one_unknown):
     msg = message.text
 
-    mycol = mongodb_read.mongodb_atlas('unknown_response')
+    mycol = mongodb_read.mongodb_atlas('global','unknown_response')
     mycol.delete_one({"_id":one_unknown['_id']}) 
 
-    mycol = mongodb_read.mongodb_atlas('original')
+    mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')
 
     x= list(mycol.find().sort({ "tag" : -1 }).limit(1))
     label_num = x[0]['tag'] + 1
@@ -598,10 +805,10 @@ def insert_new_topic(message,one_unknown):
 
     one_unknown.pop('_id')
     one_unknown['response'] = label_num
-    mycol = mongodb_read.mongodb_atlas('new_response')
+    mycol = mongodb_read.mongodb_atlas('global','new_response')
     mycol.insert_one(one_unknown) 
         
-    mycol = mongodb_read.mongodb_atlas('response_to_user')
+    mycol = mongodb_read.mongodb_atlas('global','response_to_user')
     mycol.insert_one(one_unknown) 
 
     mess = '1 new topic successfully updated'
