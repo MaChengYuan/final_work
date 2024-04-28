@@ -2,14 +2,14 @@
 
 ## Main File description
 
-* init.py is file for activation of whole system
+* init.py : file for activation of whole system
 
-main.py is file for user interface of telegram
+* main.py is file for user interface of telegram
 
-function.py is file for storage of functions linked to main.py
+* function.py is file for storage of functions linked to main.py
 
-mongodb_read.py is file containing funcion of CRUD for MONGODB
+* mongodb_read.py is file containing funcion of CRUD for MONGODB
 
-retrain.py could activate RoBERT model to train
+* retrain.py could activate RoBERT model to train
 
-recommend.py contains function to train SASrec sequential prediction model
+* recommend.py contains function to train SASrec sequential prediction model
