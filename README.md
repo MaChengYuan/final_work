@@ -1,8 +1,8 @@
 # Development of an Approach to Automation of Foreign Enrollee Intellectual Support Based on NLP-Technologies and Information Crawling
 
-[!NOTE]
-In this directory, tokens for telebot api, MongoDB and password for admin mode do not contain.
-To activate system, it is neccessary to make file named after password.txt followed format in token.py
+>[!NOTE]
+>In this directory, tokens for telebot api, MongoDB and password for admin mode do not contain.
+>To activate system, it is neccessary to make file named after password.txt followed format in token.py
 
 ## Main File description
 
