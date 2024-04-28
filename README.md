@@ -2,7 +2,7 @@
 
 ## Main File description
 
-init.py is file for activation of whole system
+* init.py is file for activation of whole system
 
 main.py is file for user interface of telegram
 
