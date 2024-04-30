@@ -2,7 +2,7 @@
 
 ## Table of Contents
 
-* [Project Description](#Project Description)
+1. Project Description
 2. Files Description
 3. Running Files
 4. Potential development
