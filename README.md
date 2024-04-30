@@ -2,11 +2,25 @@
 
 ## Table of Contents
 
-1. Project Description
+1. [Project Description](#Project Description)
 2. Files Description
 3. Running Files
 4. Potential development
 5. Licensing and Authors
+
+## Project Description
+The project aims at develpement of intellectual enrollee system for university side with semi-automatic workflow minimizing interference of man-power. This study mainly focuses on designing enrollment support systems from scratch, which is able to assign responses to given questions with support of current existing start-of-art approaches and NLP model. The whole system is a hybrid NLP works enlightened by multiple NLP studies, from the design of pre-trained language models, data augmentation approaches to sequential recommendation systems. Each approach, there is slight modification applied without changing the core functionality to optimize the capability based on requirement of current work. 
+
+Technique : 
+* Hypercomplex classifer implemented in pre-trained RoBERT model
+* GPT augmentation with Pos-tagging
+* SASrec sequential recommendation system
+
+Platform :
+* Telegram
+
+Framework :
+* Pytorch
 
 >[!NOTE]
 >In this directory, tokens for telebot api, MongoDB and password for admin mode do not contain.
@@ -25,3 +39,7 @@
 * retrain.py : activate RoBERT model to train
 
 * recommend.py : contains function to train SASrec sequential prediction model
+
+## Running Files
+
+
