@@ -267,8 +267,6 @@ def train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output='PosGpt2_e
 
     os.makedirs(output, exist_ok=True)
 
-
-
     # load train and dev data
    
     train_df['label'] = train_df['label'].apply(lambda x:str(x))

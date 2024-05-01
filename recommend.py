@@ -3,16 +3,19 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
-#from metrics import compute_metrics
-from datasets import (CausalLMDataset, CausalLMPredictionDataset, MaskedLMDataset,
-                          MaskedLMPredictionDataset, PaddingCollateFn)
-from models import RNN, BERT4Rec, SASRec
-from modules import SeqRec, SeqRecWithSampling
-from preprocess import add_time_idx
 import pickle
 from tqdm import tqdm
-import retrain
 from transformers import AdamW
+import shutil
+import os  
+
+from retrain import mongodb_atlas
+from Sasrec.datasets import (CausalLMDataset, CausalLMPredictionDataset, MaskedLMDataset,
+                          MaskedLMPredictionDataset, PaddingCollateFn)
+from Sasrec.models import RNN, BERT4Rec, SASRec
+from Sasrec.modules import SeqRec, SeqRecWithSampling
+from Sasrec.preprocess import add_time_idx
+
 
 class Args():
     def __init__(self):
@@ -45,7 +48,7 @@ class Args():
         self.top_k_metrics=10
         self.add_head = False
 
-        mycol = retrain.mongodb_atlas('itmo_data','big data and machine learning')
+        mycol = mongodb_atlas('global','train_data')
         #mycol = retrain.mongodb_atlas('train_data')
 
         print(list(mycol.find().sort('tag'))[-1]['tag']+1)
@@ -60,7 +63,7 @@ def train(seqrec_module, train_loader,config,eval_loader = None):
                           )
     train_list = []
     val_list = []
-    model_path ='recommendation.pth'
+    model_path ='main_bot/recommendation.pth'
     best_ndcg = -float('inf')
     update = 0
     
@@ -82,7 +85,6 @@ def train(seqrec_module, train_loader,config,eval_loader = None):
             #if(batch['input_ids'][0][0].item() == 0.0):
             #    print(batch['input_ids'][0])
             seqrec_module.model.zero_grad()
-            
             loss = seqrec_module.training_step(batch,step)
             total_loss += loss
             loss.backward()
@@ -146,9 +148,9 @@ def preprocess(config,itmodf=None):
         data.item_id += 1
 
     # split dataset 
-    train = data[data.time_idx_reversed >= 2]
+    train = data[data.time_idx_reversed >= 1]
     validation = data[data.time_idx_reversed == 1]
-    validation_full = data[data.time_idx_reversed >= 1]
+    validation_full = data[data.time_idx_reversed >= 0]
     test = data[data.time_idx_reversed == 0]
 
     #dataloader
@@ -250,7 +252,7 @@ def predict(config,user_history_topic):
     elif config.model == 'RNN':
         model = RNN(vocab_size=item_count + 1, add_head=config.add_head,
                     rnn_config=config.model_params)
-        
+
     model_path ='recommendation.pth'
     model.load_state_dict(torch.load(model_path))
 
@@ -337,17 +339,25 @@ def sequence_df(df,DA = False):
 def train_recommend():
     config = Args()
     
-    mycol = retrain.mongodb_atlas('global','new_response')
+    mycol = mongodb_atlas('global','new_response')
     x = mycol.find() 
     df = pd.DataFrame(list(x))
 
     df = sequence_df(df,DA=False)
     #print(df.head())
     df.item_id = df.item_id.apply(lambda x : x+1)
-    #print(df.head())
+    # print(df.head())
     seqrec_module , train_loader , eval_loader = preprocess(config,df)
     print(config.item_id_max)
+    output_file = 'main_bot'
+    os.makedirs(output_file, exist_ok=True)
+
     train(seqrec_module, train_loader,config,eval_loader = eval_loader)
+ 
+    name = 'recommendation.pth'
+    shutil.move(output_file+'/'+name,name)
+    os.rmdir(output_file)
+
 
 if __name__ == "__main__":
     train_recommend()

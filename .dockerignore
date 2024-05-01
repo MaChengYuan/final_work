@@ -14,3 +14,4 @@ __pycache__
 user_voice.ogg
 pipeline_retrain.ipynb
 research_chat_bot.ipynb
+QA.json

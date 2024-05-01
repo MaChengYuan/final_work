@@ -9,7 +9,7 @@ from telebot import types
 from nltk.tokenize import wordpunct_tokenize
 import nltk
 from nltk.corpus import stopwords
-import recommend 
+import recommend as recommend 
 import os
 from copy import deepcopy
  
@@ -135,7 +135,7 @@ def SASRec_recommendations(message):
         mess += '\n'
         mess += 'redirect to main page ... '
         
-        main.bot.send_message(message.chat.id,mess)
+        main.bot.send_message(message.chat.id,mess,reply_markup=types.ReplyKeyboardRemove())
         time.sleep(3)
         main.restart(message)
     else:
@@ -185,7 +185,7 @@ def recommendations(message,advice_options):
         mess += '\n'
         mess += 'redirect to main page ... '
         
-        main.bot.send_message(message.chat.id,mess)
+        main.bot.send_message(message.chat.id,mess,reply_markup=types.ReplyKeyboardRemove())
         time.sleep(3)
         main.restart(message)
     elif(len(advice_options) == 1):
@@ -218,15 +218,20 @@ def recommendations(message,advice_options):
         
 
 def recommendations_decode(message,questions_srs):
-    try:
+
         if(message.text == 'None'):
             mess = 'redirect to main page ... '      
-            main.bot.send_message(message.chat.id,mess)
+            main.bot.send_message(message.chat.id,mess,reply_markup=types.ReplyKeyboardRemove())
             time.sleep(3)
             main.restart(message)
         elif(message.text == 'I want to write'):
-            msg = main.bot.send_message(message.chat.id, 'please write your questions')
-            main.bot.register_next_step_handler(msg, main.more_questions)
+            db_list = mongodb_read.show_program_name('itmo_data',True)
+            markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+            for name in db_list:
+                markup.add(f'{name}') 
+            mess = 'Please choose target program'
+            msg = main.bot.send_message(message.chat.id, mess, reply_markup=markup, parse_mode='html')
+            main.bot.register_next_step_handler(msg, main.choose_program)
         else:    
             select_index = int(message.text.split('.')[0]) 
             questions = questions_srs[0]
@@ -241,6 +246,8 @@ def recommendations_decode(message,questions_srs):
                 main.record.predicted = None
                 main.record.message = None
                 main.record.response = select_index
+                main.record.modified_response = None
+                
                 mongodb_read.record_dialogue('global',main.record,'new_response')
 
                 mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
@@ -259,6 +266,7 @@ def recommendations_decode(message,questions_srs):
                 main.record.predicted = None
                 main.record.message = None
                 main.record.response = select_index
+                main.record.modified_response = None
                 mongodb_read.record_dialogue('global',main.record,'new_response')
                 
                 print(questions[select_index])
@@ -276,15 +284,6 @@ def recommendations_decode(message,questions_srs):
                 mess = 'More recommendations below'
                 main.bot.send_message(message.chat.id,mess)
                 recommendations(message,questions)
-    except:
-        print('recommendations_decode')
-        main.message_delete_menu(message)
-        mess = 'probably you did not choose option from buttons, so error occurred'
-        mess = '\n'
-        mess += 'redirect to menu ...'
-        main.bot.send_message(message.chat.id,mess,reply_markup=types.ReplyKeyboardRemove())
-        time.sleep(3)
-        main.restart(message)
 
 def model_decode(sents,max_length,message,advice_options = None):
     
@@ -332,7 +331,7 @@ def model_decode(sents,max_length,message,advice_options = None):
             mycol = mongodb_read.mongodb_atlas('itmo_data','big data and machine learning')  
             
             #found = mongodb_read.query(index,'original')
-            main.record.message = sent
+            main.record.message = sent.split(':')[1]
             main.record.predicted = index
 
             mess = f'To question : <b>{sent}</b>'
@@ -355,7 +354,7 @@ def model_decode(sents,max_length,message,advice_options = None):
 
             main.bot.register_next_step_handler(msg, satisfaction,sents_other_answer_options) 
         else:
-            main.record.message = sent
+            main.record.message = sent.split(':')[1]
             main.record.predicted = None
             mess = '- - - - - - - - - - - - - - - - - - - - '
             mess += '\n'
@@ -426,6 +425,7 @@ def record_correct_response(message,sents_other_answer_options):
             if(ans == 'None'):
                 
                 main.record.response = None
+                main.record.modified_response = None
                 mongodb_read.record_dialogue('global',main.record,'unknown_response')
                 #delete current questions 
                 sents.remove(sent)
@@ -470,7 +470,7 @@ def record_correct_response(message,sents_other_answer_options):
                 main.record.response = other_answer[int(ans)]
                 
                 #write into database
-                
+                main.record.modified_response = None
                 mongodb_read.record_dialogue('global',main.record,'new_response')
 
                 print(other_answer[int(ans)])
@@ -523,6 +523,7 @@ def satisfaction(message,sents_other_answer):
             #mongodb_read.record_dialogue(main.record,'trash')
             redirect_to_model(message,sents,other_answer)
         else:
+            main.record.modified_response = None
             mongodb_read.record_dialogue('global',main.record,'new_response')
             redirect_to_model(message,sents,other_answer)
     

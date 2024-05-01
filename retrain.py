@@ -1,8 +1,12 @@
 #model
-import NLPmodel 
+from Train import NLPmodel 
+from Train.eda import gen_eda
+from Train.cPosGpt2 import train_cposgpt2_and_augment
+import tokens
 
 # import libraries
 import random
+import pymongo
 import time
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -11,26 +15,23 @@ import re
 import torch
 from transformers import RobertaTokenizer
 from transformers import AdamW
-
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch import nn
-
 import matplotlib.pyplot as plt
-
 from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
 import warnings
 import os
+import shutil
 import nltk
+from transformers import GPTNeoForCausalLM
+from transformers import GPT2Tokenizer
+from transformers import GPT2LMHeadModel
+
 from nltk.corpus import stopwords
 from nltk.tokenize import wordpunct_tokenize
 nltk.download('stopwords')
 warnings.filterwarnings("ignore", category=UserWarning)
 
-from eda import gen_eda
-from cPosGpt2 import train_cposgpt2_and_augment
-
-import tokens
-import pymongo
 
 token = tokens.token2
 myclient = pymongo.MongoClient(token)
@@ -339,6 +340,7 @@ class EarlyStopper:
         return False
     
 def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloader=None, evaluation=False,patience = 25):
+
     """Train the BertClassifier model.
     """
     # Specify loss function
@@ -359,6 +361,7 @@ def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloa
         print(
             f"{'Epoch':^7} | {'Batch':^7} | {'Train Loss':^12} | {'Train Accuracy':^12} | {'Val Loss':^10} | {'Val Acc':^9} | {'Elapsed':^9}")
         print("-" * 86)
+
         # Measure the elapsed time of each epoch
         t0_epoch, t0_batch = time.time(), time.time()
 
@@ -367,8 +370,7 @@ def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloa
 
         # Put the model into the training mode
         model.train()
-
-        # For each batch of training data...
+                # For each batch of training data...
         train_accuracy = []
         for step, batch in enumerate(train_dataloader):
             batch_counts += 1
@@ -409,19 +411,23 @@ def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloa
 
             # Update parameters and the learning rate
             optimizer.step()
-
+        # retrain mechanisim 
+        if(train_accuracy[-1] < 0.5):
+            print('under-fitting , restart it')
+            train(model,optimizer, train_dataloader, tem, lam, scl, epoch ,val_dataloader, evaluation=evaluation,patience=patience)
+        
+        # =======================================
+        #               Evaluation
+        # =======================================
+        
         # Reset batch tracking variables
         batch_loss, batch_counts = 0, 0
         t0_batch = time.time()
-
         # Calculate the average loss over the entire training data
         avg_train_loss = total_loss / len(train_dataloader)
         total_accuracy = np.mean(train_accuracy)
         train_list.append(avg_train_loss)
-
-        # =======================================
-        #               Evaluation
-        # =======================================
+        
         if evaluation == True:
             # After the completion of each training epoch, measure the model's performance
             # on our validation set.
@@ -436,9 +442,6 @@ def train(model,optimizer,train_dataloader, tem, lam, scl,epoch = 40,val_dataloa
                 f"{'end':^7} | {'-':^7} | {avg_train_loss:^12.6f} | {total_accuracy:^14.6} | {val_loss:^10.6f} | {val_accuracy:^9.2f} | {time_elapsed:^9.2f}")
             print("-" * 86)
         print("\n")
-
-    
-        
         if (val_loss < best_validation_loss) and scl == True:
             best_validation_loss = val_loss
             torch.save(model.state_dict(), scl_model_path)
@@ -552,7 +555,7 @@ def model_predict(model,hidden, model_path, test_dataloader):
 
     return all_logits
 
-# delete defect column : time is None , label = string , message from users has not insufficient information
+# for cleaning new_response table , delete defect column : time is None , label = string , message from users has not insufficient information
 def clean_db(df):
     #drop time = null
     time_na = df[df['time'].isna()]
@@ -604,9 +607,185 @@ def clean_punctuation(string):
         except:
             return string
 
+def augment_phase(df,output_file,program_name,seed,alpha,first_aug_num,second_aug_num):
+    #eda
+    print('eda phase')   
+    eda_file_name = f'eda_{program_name}.tsv'
+    output_dir = os.path.join(output_file, eda_file_name)
+    gen_eda(df,output_dir , alpha=alpha, num_aug=first_aug_num , reverse = False)
+    
+    #gpt2
+    print('GPT phase')
+    # GPT2_MODEL = 'gpt2'
+    # model = GPT2LMHeadModel.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
+
+    GPT2_MODEL = 'EleutherAI/gpt-neo-1.3B' 
+    model = GPTNeoForCausalLM.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
+
+    tokenizer = GPT2Tokenizer.from_pretrained(GPT2_MODEL,
+                                                  do_lower_case=True,
+                                              cache_dir='transformers_cache')
+    
+    #eda + gpt2     
+    file_name = f'posgpt2_eda_{program_name}.tsv'    
+    x = f'{output_file}/{eda_file_name}'
+    train_df = pd.read_csv(x,sep='\t')
+
+    sample = 3    
+    val_df = [train_df.loc[train_df.label == i].sample(n=sample, random_state=seed) for i in
+                    train_df.label.unique()]
+    val_df = pd.concat(val_df, axis=0).sample(frac=1)
+   
+    train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,file_name=file_name,seed = 1234,max_seq_length = 64,sample_num=second_aug_num,num_train_epochs=3)
+       
+    aug_path = f'{output_file}/{file_name}'
+    return aug_path
+
+def make_program_accessable():
+    for i in show_program_name():
+        mydb = myclient["new_itmo"]
+        mycol = mydb[i]
+        mycol.update_many({},{"$set":{'access':True}})
+
+def show_program_name(db = 'itmo_data',access = False):
+    mydb = myclient[db]
+    list_db = mydb.list_collection_names()
+    rm_list = []
+    print(list_db)
+    if (access == True):
+        
+        for name in list_db:
+            num = list(mydb[name].find({'access':True}))           
+            if(len(num) == 0):
+                print(name)
+                rm_list.append(name)
+
+    list_db = list(set(list_db)-set(rm_list))
+    print(list_db)
+    time_order = []
+    for name in list_db:
+        time_order.append(list(mydb[name].find().sort({'time':-1}))[0]['time'])
+    sorted(time_order)
+    time_order_np = np.array(time_order)
+    sort_index = np.argsort(time_order_np)
+    new_arrage = []
+    for i in sort_index:
+        new_arrage.append(list_db[i])
+    del list_db
+    list_db = new_arrage
+    
+    return list_db
+
+def train_data_rewrite(db_list):
+    df_dict = dict()
+    for index in range(len(db_list)):
+        mydb = myclient["itmo_data"]
+        mycol = mydb[db_list[index]]
+        
+        x= mycol.find().sort('tag')
+        df =  pd.DataFrame(list(x))
+        df = df[['tag','patterns']]
+        df['program'] = db_list[index]
+        globals()["_".join(['df', db_list[index]])] = df
+        df_dict[db_list[index]] = globals()["_".join(['df', db_list[index]])]
+        
+    # to find existing program collection and write in one collection
+    count_label_last_df = 0
+    for i in df_dict:
+        df_dict[i].tag = df_dict[i].tag.apply(lambda x : x + count_label_last_df)
+        count_label_last_df = len(df_dict[i].tag.unique())
+        
+    df = pd.DataFrame()
+    for index in df_dict:
+        df= pd.concat([df,df_dict[index]])
+    mydb = myclient["global"]
+    mycol = mydb['train_data']
+    mycol.drop()
+    mycol.insert_many(df.to_dict('records'))
+
+
+def dynamical_df_from_db(db_list):
+    
+    # initialize again
+    df_dict = dict()
+    for index in range(len(db_list)):
+        mydb = myclient["itmo_data"]
+        mycol = mydb[db_list[index]]
+        
+        x= mycol.find().sort('tag')
+        df =  pd.DataFrame(list(x))
+        df = df[['tag','patterns']]
+        globals()["_".join(['df', db_list[index]])] = df.rename(columns={'tag':'label','patterns':'sentence'})
+        df_dict[db_list[index]] = globals()["_".join(['df', db_list[index]])]
+
+    return df_dict
+
+### section to check df of new_response table and update if necessary to match df from updated collection itmo_data
+def dynamical_change_index_in_new_responses_only_in_df(program,diff,df):
+    db_list = show_program_name('itmo_data')
+    print(program)
+    print(db_list)
+
+    index_locate = db_list.index(program)
+    mydb = myclient["itmo_data"]
+    distinct_label = 0
+    for i in db_list[:index_locate+1]: 
+        mycol = mydb[i]
+        distinct_label += len(pd.DataFrame(mycol.find()).tag.unique())
+        
+    mydb = myclient["global"]
+    mycol = mydb['new_response']
+    
+    if df.empty:
+        df = pd.DataFrame(mycol.find())
+        df = clean_db(df)
+    
+    print(f'distinct_label is {distinct_label}')
+    df['response'] = df['response'].apply(lambda x : x + diff if x>=distinct_label else x)
+    
+    return df
+
+# check each program tag value and dynamical change index in new response
+def check_each_tag_in_program_only_in_df():
+    df = pd.DataFrame()
+    mydb = myclient['global']
+    train_col = mydb['train_data']
+    list_db = show_program_name()
+    for i in list_db:
+        each_program_label_in_train_data = len(train_col.find({'program':i}).distinct('tag'))
+        mydb = myclient['itmo_data']
+        mycol = mydb[i]
+        each_program_label_in_itmo_data = len(mycol.find().distinct('tag'))
+        print(i)
+        print(each_program_label_in_train_data)
+        print(each_program_label_in_itmo_data)
+        
+        if(each_program_label_in_train_data < each_program_label_in_itmo_data):
+            print()
+            print(f'found {i}')
+            print()           
+            diff = abs(each_program_label_in_train_data - each_program_label_in_itmo_data)
+            df = dynamical_change_index_in_new_responses_only_in_df(i,diff,df)
+            
+    return df
+
+def merge_new_response_to_original(df):
+    # see if there is change
+    new_df = check_each_tag_in_program_only_in_df()
+    # combine new_response
+    if new_df.empty:
+        print('need to create new_df')
+        mydb = myclient['global']
+        mycol = mydb['new_response']
+        new_df= pd.DataFrame(list(mycol.find()))
+    new_df.message = new_df['program']+':'+new_df['message']
+    new_df = new_df[['message','response']].rename(columns={'message':'sentence','response':'label'})
+    merge_df= pd.concat([df,new_df])
+    
+    return merge_df
 
 def train_process():
-    epoch =40 # number of epochs
+    epoch =1 # number of epochs
     scl = True  # if True -> scl + cross entropy loss. else just cross entropy loss
     temprature = 0.3  # temprature for contrastive loss
     lam = 0.9  # lambda for loss
@@ -620,72 +799,46 @@ def train_process():
     # for pos_gpt2
     second_num_aug = 4
 
-    # original datasets plus new_responses 
-    mycol = mongodb_atlas('global','new_response')
-    x = mycol.find()    
-    df = pd.DataFrame(list(x))
-    # clean and remove unneccesary training datas
-    df = clean_db(df)
-    df = df[['response','message']]
-    new = df.rename(columns={'response':'label','message':'sentence'})
-
-    mycol = mongodb_atlas('itmo_data','big data and machine learning')
-    x = mycol.find()    
-    df = pd.DataFrame(list(x))
-    df = df.rename(columns={'tag':'label','patterns':'sentence'})
-    traindf = df[['label','sentence']]
-
-    df = pd.concat([traindf, new], axis=0).sample(frac=1).reset_index(drop=True)
-
-    #dropna in case 
-    df = df.dropna(subset = ['sentence']).reset_index(drop=True)
-
-
-    
-    df = df[['label','sentence']]
-
-
     #main bot augmentation file
     output_file = 'main_bot'
     os.makedirs(output_file, exist_ok=True)
-               
-    #eda
-    print('eda phase')
-    
-    file_name = 'eda.tsv'
-    output_dir = os.path.join(output_file, file_name)
-    gen_eda(df,output_dir , alpha=alpha, num_aug=num_aug , reverse = False)
-    
-    #from transformers import GPTNeoForCausalLM
-    from transformers import GPT2Tokenizer
-    from transformers import GPT2LMHeadModel
-    
-    #gpt2
-    print('GPT phase')
-    
-    
-    GPT2_MODEL = 'gpt2'
-    model = GPT2LMHeadModel.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
-    
-    tokenizer = GPT2Tokenizer.from_pretrained(GPT2_MODEL,do_lower_case=True,cache_dir='transformers_cache')
-    
-    GPT2_MODEL = 'EleutherAI/gpt-neo-1.3B' 
-    #model = GPTNeoForCausalLM.from_pretrained(GPT2_MODEL,cache_dir='transformers_cache')
 
-    #eda + gpt2     
+    db_list = show_program_name()
+    df_dict = dynamical_df_from_db(db_list)
 
-    file_name = 'posgpt2_eda.tsv'    
-    x = f'{output_file}/eda.tsv'
-    train_df = pd.read_csv(x,sep='\t')
+    #list_db
+    for k in df_dict :
+        print(f'currently augmentating : {k}')
+        aug_path = augment_phase(df_dict[k],output_file,k,seed,alpha,num_aug,second_num_aug)
+        print(f'Augment file is saved at {aug_path}')
 
-    sample = 3    
-    val_df = [train_df.loc[train_df.label == i].sample(n=sample, random_state=seed) for i in
-                    train_df.label.unique()]
-    val_df = pd.concat(val_df, axis=0).sample(frac=1)   
-    train_cposgpt2_and_augment(model,tokenizer,train_df,val_df,output=output_file,file_name=file_name,seed = 1234,max_seq_length = MAX_LEN,sample_num=second_num_aug,num_train_epochs=5)
+    # check the number 
+    for i in df_dict:
+        df = pd.DataFrame(pd.read_csv(f'main_bot/posgpt2_eda_{i}.tsv',sep='\t'))
+        print(len(df))
+        print(len(df_dict[i]))
+        df_dict[i] = pd.concat([df_dict[i],df]).reset_index(drop=True)
+        print(len(df_dict[i]))
 
-    aug_path = f'{output_file}/posgpt2_eda.tsv'
+    #check final numbebr 
+    count_label_last_df = 0
+    for i in df_dict:
+        df_dict[i].sentence = df_dict[i].sentence.apply(lambda x : f'{i}:'+x)
+        df_dict[i].label = df_dict[i].label.apply(lambda x : x + count_label_last_df)
+        count_label_last_df = len(df_dict[i].label.unique())
 
+    df = pd.DataFrame()
+    for index in df_dict:
+        df= pd.concat([df,df_dict[index]])
+    print(len(df))
+
+    print('before add new_response')
+    # add modifed new_response datasets to modifed itmo_datasets
+    df = merge_new_response_to_original(df)
+    print('after add new_response')
+    print(len(df))
+
+    # training 
     set_seed(seed)
     print('pre-process phase')
     tokenizer = RobertaTokenizer.from_pretrained('roberta-large', do_lower_case=True) 
@@ -700,11 +853,79 @@ def train_process():
     print('training phase')
     val_loss, val_accuracy = train(bert_classifier,optimizer, train_dataloader, temprature, lam, scl, epoch ,val_dataloader, evaluation=True,patience=patience)
 
+    # delete file and move model to directory in use
+     
+    output_file = 'main_bot'
+    name = 'itmo_model.pt'
+    shutil.move(output_file+'/'+name,name)
+    os.rmdir(output_file)
+
+    # modify database and allow access to added datasets
+    return db_list
+    
     #test 
     #test_accuracy = test_evaluate(QModel_Classifier,cross_model_path, test_dataloader,hidden=hidden,num_labels=num_classes,feature_remove_max=True)
 
+def dynamical_change_index_in_new_responses(program,diff,df):
+    db_list = show_program_name('itmo_data')
+    print(program)
+    print(db_list)
 
+    index_locate = db_list.index(program)
+    mydb = myclient["itmo_data"]
+    distinct_label = 0
+    for i in db_list[:index_locate+1]: 
+        mycol = mydb[i]
+        distinct_label += len(pd.DataFrame(mycol.find()).tag.unique())
+        
+    mydb = myclient["global"]
+    mycol = mydb['new_response']
+    
+    if df.empty:
+        df = pd.DataFrame(mycol.find())
+        df = clean_db(df)
+    
+    print(f'distinct_label is {distinct_label}')
+    df['response'] = df['response'].apply(lambda x : x + diff if x>=distinct_label else x)
+    for i in df.to_dict('records'):
+        mycol.update_one({'_id':i['_id']},{"$set":{'response':i['response']}})
+
+
+# check each program tag value and dynamical change index in new response
+def check_each_tag_in_program():
+    df = pd.DataFrame()
+    mydb = myclient['global']
+    train_col = mydb['train_data']
+    list_db = show_program_name()
+    for i in list_db:
+        each_program_label_in_train_data = len(train_col.find({'program':i}).distinct('tag'))
+        mydb = myclient['itmo_data']
+        mycol = mydb[i]
+        each_program_label_in_itmo_data = len(mycol.find().distinct('tag'))
+        print(i)
+        print(each_program_label_in_train_data)
+        print(each_program_label_in_itmo_data)
+        
+        if(each_program_label_in_train_data < each_program_label_in_itmo_data):
+            print()
+            print(f'found {i}')
+            print()           
+            diff = abs(each_program_label_in_train_data - each_program_label_in_itmo_data)
+            dynamical_change_index_in_new_responses(i,diff,df)
+            
+# if new topic or program added 
+def mid_term_retrain():
+    db_list = train_process()
+
+    check_each_tag_in_program()
+
+    train_data_rewrite(db_list)
+
+    make_program_accessable()
 
 if __name__ == "__main__":
-    train_process()
+    mid_term_retrain()
+    
+    
+
     
