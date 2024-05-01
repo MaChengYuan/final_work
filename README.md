@@ -5,7 +5,7 @@
 1. Project Description
 2. Technologies
 3. Files Description
-4. Running Files
+4. Setup
 5. Potential development
 6. Licensing and Authors
 
@@ -24,7 +24,7 @@ Platform :
 Framework :
 * Pytorch
 
-## Main File description
+## File description (only main)
 
 * init.py : file for activation of whole system
 
@@ -44,4 +44,15 @@ Framework :
 >In this directory, tokens for telebot api, MongoDB and password for admin mode do not contain.
 >To activate system, it is neccessary to make file named after password.txt followed format in token.py
 
+## Potential development
+
+
+
+## Licensing and Authors
+
+Fernandodoro - ITMO student
+
+Reach me at:
+
+tommy0101@hotmail.com.tw
 
