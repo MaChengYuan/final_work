@@ -44,7 +44,11 @@ Framework :
 >In this directory, tokens for telebot api, MongoDB and password for admin mode do not contain.
 >To activate system, it is neccessary to make file named after password.txt followed format in token.py
 
-## Potential development
+## Result
+
+* Hypercomplex classifier
+
+![alt text](0.png)
 
 
 
