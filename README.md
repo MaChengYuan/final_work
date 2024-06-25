@@ -46,9 +46,13 @@ Framework :
 
 ## Result
 
-* Hypercomplex classifier
+* Question-Answering
 
 ![alt text](0.png)
+
+* Recommendation mechanism
+
+![alt text](1.png)
 
 
 
